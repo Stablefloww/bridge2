@@ -14,8 +14,8 @@ const __dirname = path.dirname(__filename);
 
 // Stargate Protocol Contract ABI (minimum required functions)
 const stargateRouterABI = [
-  "function swap(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, uint256 _lzTxParams, bytes calldata _to, bytes calldata _payload) payable external",
-  "function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, uint256 _lzTxParams) external view returns (uint256, uint256)"
+  "function swap(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams, bytes calldata _to, bytes calldata _payload) payable external",
+  "function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams) external view returns (uint256, uint256)"
 ];
 
 // Stargate Bridge Constants
@@ -296,43 +296,45 @@ app.post('/api/execute-bridge', async (req, res) => {
         'https://eth-mainnet.g.alchemy.com/v2/demo'
       );
       
-      // 5. Create a contract instance for the Stargate Router
-      // Use RouterETH for ETH transfers
+      // Determine which router address to use based on token
       let stargateRouterAddress;
       if (normalizedToken === 'eth') {
+        // Use RouterETH for ETH transfers
         stargateRouterAddress = STARGATE_ROUTER_ETH_ADDRESSES[normalizedSourceChain];
         
-        // Check if this chain supports ETH transfers
         if (!stargateRouterAddress) {
           return res.json({
             success: false,
-            message: 'Unsupported token for chain',
-            error: `${sourceChain} doesn't support ETH transfers via Stargate Protocol.`
+            message: 'Unsupported token',
+            error: `Stargate Protocol doesn't support ETH bridging from ${sourceChain}.`
           });
         }
       } else {
+        // Use standard Router for ERC20 tokens
         stargateRouterAddress = STARGATE_ROUTER_ADDRESSES[normalizedSourceChain];
       }
       
-      // 6. Calculate the amount in the proper format
-      // Stargate uses the native token's decimals
-      let decimals = 18; // Default for ETH
-      if (normalizedToken === 'usdc' || normalizedToken === 'usdt') {
-        decimals = 6;
+      // Get token address if applicable (for ERC20 tokens)
+      let tokenAddress = null;
+      if (normalizedToken !== 'eth') {
+        // Look up token address from our mapping
+        if (TOKEN_ADDRESSES[normalizedToken] && TOKEN_ADDRESSES[normalizedToken][normalizedSourceChain]) {
+          tokenAddress = TOKEN_ADDRESSES[normalizedToken][normalizedSourceChain];
+        } else {
+          return res.json({
+            success: false,
+            message: 'Unsupported token',
+            error: `Token ${token} not supported on ${sourceChain}.`
+          });
+        }
       }
+
+      // Convert amount to wei or token-specific units
+      const decimalPlaces = normalizedToken === 'eth' ? 18 : 
+                           normalizedToken === 'usdc' ? 6 : 
+                           normalizedToken === 'usdt' ? 6 : 18;
       
-      const amountBigInt = ethers.parseUnits(amount, decimals);
-      
-      // 7. Get the token address for approval (for ERC20 tokens)
-      const tokenAddress = TOKEN_ADDRESSES[normalizedToken]?.[normalizedSourceChain];
-      
-      if (!tokenAddress && normalizedToken !== 'eth') {
-        return res.json({
-          success: false,
-          message: 'Token not supported',
-          error: `No token address found for ${token} on ${sourceChain}.`
-        });
-      }
+      const amountBigInt = ethers.parseUnits(amount.toString(), decimalPlaces);
       
       // 8. Return parameters needed for frontend to execute the transaction
       return res.json({
@@ -352,12 +354,17 @@ app.post('/api/execute-bridge', async (req, res) => {
           userAddress: walletAddress,
           amountWithDecimals: amountBigInt.toString(),
           tokenAddress: tokenAddress || 'native',
-          isEth: normalizedToken === 'eth'
+          tokenDecimals: decimalPlaces,
+          isEth: normalizedToken === 'eth',
+          // Include the router type to help the client determine which contract to use
+          useRouterETH: normalizedToken === 'eth'
         },
         error: 'This demo provides transaction parameters for direct Stargate Protocol integration.',
         stargateInfo: {
           docs: 'https://stargateprotocol.gitbook.io/stargate/',
-          contractInfo: 'Using Stargate Router with the provided parameters'
+          contractInfo: normalizedToken === 'eth' ? 
+            'Using Stargate RouterETH with the provided parameters' : 
+            'Using Stargate Router with the provided parameters'
         }
       });
       

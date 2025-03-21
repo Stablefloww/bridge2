@@ -53,14 +53,26 @@ export interface WalletState {
   address: string | null
   chainId: number | null
   balances: Record<string, string>
+  isConnected: boolean
+  isLoading: boolean
   status: 'disconnected' | 'connecting' | 'connected' | 'error'
+  balance: Record<string, string>
   error?: string
+  
+  // Connection methods
   connect: (connector: any) => Promise<void>
   disconnect: () => void
   updateBalances: (balances: Record<string, string>) => void
   handleChainChanged: (chainId: number) => void
   handleAccountsChanged: (accounts: string[]) => void
+  
+  // Setter methods
   setAddress: (address: string) => void
+  setIsConnected: (isConnected: boolean) => void
+  setChainId: (chainId: number) => void
+  setBalance: (token: string, amount: string) => void
+  setIsLoading: (isLoading: boolean) => void
+  setError: (error: string | undefined) => void
 }
 
 export type ChainInfo = {

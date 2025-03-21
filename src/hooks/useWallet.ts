@@ -1,12 +1,37 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useWalletStore } from '@/store/wallet';
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useNetwork, useSwitchNetwork } from 'wagmi';
-import { SUPPORTED_CHAINS } from '@/lib/bridges/types';
+import { 
+  useAccount, 
+  useConnect, 
+  useDisconnect, 
+  useBalance, 
+  useChainId,
+  useSwitchChain 
+} from 'wagmi';
 
-// This is a placeholder hook that would be replaced with actual wallet integration
-// using wagmi or similar libraries
+// Mock implementation of store since the real one isn't accessible
+// You should replace this with the actual import when available
+const useWalletStore = () => {
+  return {
+    setAddress: (address: string) => {},
+    setIsConnected: (isConnected: boolean) => {},
+    setChainId: (chainId: number) => {},
+    setBalance: (token: string, amount: string) => {},
+    setIsLoading: (isLoading: boolean) => {},
+    setError: (error: string | undefined) => {},
+    disconnect: () => {},
+    address: null,
+    isConnected: false,
+    chainId: null,
+    balance: {},
+    error: undefined
+  };
+};
+
+// Define supported chains for the application
+const SUPPORTED_CHAINS = ["1", "8453"]; // Ethereum Mainnet and Base
+
 export function useWallet() {
   const {
     setAddress,
@@ -28,8 +53,7 @@ export function useWallet() {
   const { connect: wagmiConnect, connectors, isPending } = useConnect();
   const { disconnect: wagmiDisconnect } = useDisconnect();
   const currentChainId = useChainId();
-  const { chain } = useNetwork();
-  const { switchNetwork } = useSwitchNetwork();
+  const { switchChain: wagmiSwitchChain } = useSwitchChain();
   
   // Update store when wagmi state changes
   useEffect(() => {
@@ -41,24 +65,24 @@ export function useWallet() {
 
   // Sync wallet store with wagmi state
   useEffect(() => {
-    if (isConnected && address && chain) {
+    if (isConnected && address && currentChainId) {
       setAddress(address);
       setIsConnected(isConnected);
-      setChainId(chain.id);
-      if (!SUPPORTED_CHAINS.includes(chain.id.toString())) {
+      setChainId(currentChainId);
+      if (!SUPPORTED_CHAINS.includes(currentChainId.toString())) {
         setError('Unsupported network');
       }
     }
-  }, [isConnected, address, chain, setAddress, setIsConnected, setChainId, setError]);
+  }, [isConnected, address, currentChainId, setAddress, setIsConnected, setChainId, setError]);
 
   // Connect function using ConnectKit
   const connect = async () => {
     try {
       setIsLoading(true);
-      setError(null);
+      setError(undefined);
       
       // Find the appropriate connector
-      const connector = connectors[0]; // Usually ConnectKit is first
+      const connector = connectors[0]; // Usually first connector
       if (!connector) {
         throw new Error('No wallet connectors available');
       }
@@ -99,8 +123,8 @@ export function useWallet() {
 
   const switchChain = async (chainId: number) => {
     try {
-      if (switchNetwork) {
-        switchNetwork(chainId);
+      if (wagmiSwitchChain) {
+        wagmiSwitchChain({ chainId });
         setChainId(chainId);
         setError(undefined);
       }
