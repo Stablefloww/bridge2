@@ -4,95 +4,49 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Bridge NLP Chat</title>
-  <!-- Load ethers.js from multiple CDNs with fallbacks -->
+  <!-- Load local ethers.js instead of CDN -->
+  <script src="/js/ethers-5.7.2.umd.min.js" type="text/javascript"></script>
   <script>
-    function loadEthers() {
-      console.log('Attempting to load ethers.js from primary CDN');
-      var script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js';
-      script.type = 'text/javascript';
-      script.onerror = function() {
-        console.warn('Primary ethers.js CDN failed, trying second CDN...');
-        var script2 = document.createElement('script');
-        script2.src = 'https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js';
-        script2.type = 'text/javascript';
-        script2.onerror = function() {
-          console.warn('Second ethers.js CDN failed, trying third CDN...');
-          var script3 = document.createElement('script');
-          script3.src = 'https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js';
-          script3.type = 'text/javascript';
-          script3.onerror = function() {
-            console.error('All ethers.js CDNs failed to load');
-            window.ethersLoadFailed = true;
-          };
-          script3.onload = function() {
-            console.log('ethers.js loaded successfully from third CDN');
-            window.ethersLoaded = true;
-          };
-          document.head.appendChild(script3);
-        };
-        script2.onload = function() {
-          console.log('ethers.js loaded successfully from second CDN');
-          window.ethersLoaded = true;
-        };
-        document.head.appendChild(script2);
-      };
-      script.onload = function() {
-        console.log('ethers.js loaded successfully from primary CDN');
-        window.ethersLoaded = true;
-      };
-      document.head.appendChild(script);
-    }
-    
-    // Load ethers immediately
-    loadEthers();
-  </script>
-  <!-- Add Stargate SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@layerzerolabs/stargate-ui@latest/element.js"></script>
-  <!-- Check ethers.js availability and load a local version if needed -->
-  <script>
-    // Final check and ethers verification before DOMContentLoaded
-    window.addEventListener('DOMContentLoaded', function() {
-      console.log('DOMContentLoaded - checking ethers availability:', typeof ethers);
-      
+    // Verify ethers.js loaded successfully and provide fallback
+    document.addEventListener('DOMContentLoaded', function() {
       if (typeof ethers === 'undefined') {
-        console.error('All ethers.js CDNs failed, trying emergency local load');
+        console.error('Local ethers.js failed to load. Attempting fallback options...');
+        // Try loading from different CDNs
+        const cdns = [
+          "https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js",
+          "https://unpkg.com/ethers@5.7.2/dist/ethers.umd.min.js"
+        ];
         
-        // Will add ethers status message after DOM is fully loaded
-        setTimeout(function() {
-          const chatMessagesElement = document.getElementById('chat-messages');
-          if (chatMessagesElement) {
-            // Create an alert to inform the user
-            const messageElement = document.createElement('div');
-            messageElement.className = 'message system-message transaction-error';
-            messageElement.innerHTML = 'Loading blockchain libraries... Please wait.';
-            chatMessagesElement.appendChild(messageElement);
-            
-            // Try one more CDN as emergency fallback
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js';
-            script.onload = function() {
-              console.log('Emergency ethers.js loaded successfully');
-              messageElement.innerHTML = 'Blockchain libraries loaded successfully! You can now proceed.';
-              messageElement.className = 'message system-message transaction-success';
-              // Manually dispatch an event that ethers is ready
-              window.ethersReady = true;
-              document.dispatchEvent(new Event('ethersLoaded'));
-            };
-            script.onerror = function() {
-              console.error('All attempts to load ethers.js failed');
-              messageElement.innerHTML = 'Failed to load blockchain libraries. Please check your internet connection and refresh the page.';
-            };
-            document.head.appendChild(script);
+        function tryNextCDN(index) {
+          if (index >= cdns.length) {
+            console.error("Failed to load ethers.js from all sources");
+            alert("Failed to load ethers.js. Please reload the page or try a different browser.");
+            return;
           }
-        }, 500);
+          
+          const script = document.createElement('script');
+          script.src = cdns[index];
+          script.onload = function() {
+            console.log('Ethers library loaded from fallback:', cdns[index]);
+            console.log('Ethers version:', window.ethers?.version || 'unknown');
+          };
+          script.onerror = function() {
+            console.error('Failed to load ethers.js from', cdns[index]);
+            tryNextCDN(index + 1);
+          };
+          document.head.appendChild(script);
+        }
+        
+        tryNextCDN(0);
       } else {
-        console.log('ethers.js verified available at DOMContentLoaded');
-        window.ethersReady = true;
-        document.dispatchEvent(new Event('ethersLoaded'));
+        console.log('Ethers library loaded successfully from local file');
+        console.log('Ethers version:', window.ethers?.version || 'unknown');
       }
     });
   </script>
+  
+  <!-- Add Stargate SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@layerzerolabs/stargate-ui@latest/element.js"></script>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -360,45 +314,6 @@
       justify-content: flex-end;
       gap: 10px;
     }
-    
-    /* Model Selector */
-    #model-selector {
-      padding: 10px 15px;
-      border-top: 1px solid #eee;
-      background-color: #f9f9f9;
-      display: flex;
-      align-items: center;
-      font-size: 0.9rem;
-    }
-    
-    #model-selector label {
-      margin-right: 10px;
-      font-weight: bold;
-    }
-    
-    #ai-model {
-      padding: 5px 10px;
-      border: 1px solid #ddd;
-      border-radius: 5px;
-      background-color: white;
-      flex-grow: 1;
-      max-width: 200px;
-    }
-    
-    #ai-model:focus {
-      border-color: #4a6cf7;
-      outline: none;
-    }
-    
-    /* Ethers Status Message */
-    #ethers-status {
-      margin: 10px;
-      padding: 10px;
-      text-align: center;
-      font-size: 0.9rem;
-      border-radius: 5px;
-      display: none;
-    }
   </style>
 </head>
 <body>
@@ -416,19 +331,15 @@
     </div>
     
     <div class="chat-container">
-      <div id="chat-messages"></div>
-      <div id="loading-indicator">Loading...</div>
-      <div id="ethers-status" class="system-message"></div>
-      <div id="chat-input-container">
-        <textarea id="chat-input" placeholder="Send 10 USDC from Base to Arbitrum..." rows="3"></textarea>
-        <button id="send-button">Send</button>
+      <div class="chat-messages" id="chat-messages">
+        <div class="message system-message">
+          Hello! I can help you bridge tokens between chains using natural language. Try saying something like "Send 100 USDC to Arbitrum" or "Bridge ETH from Ethereum to Base".
+        </div>
       </div>
-      <div id="model-selector">
-        <label>Select AI Model:</label>
-        <select id="ai-model">
-          <option value="openai">OpenAI (GPT-4)</option>
-          <option value="gemini">Google Gemini</option>
-        </select>
+      
+      <div class="message-input">
+        <input type="text" id="command-input" placeholder="Type your bridge command here..." autofocus>
+        <button id="send-button">Send</button>
       </div>
     </div>
     
@@ -445,260 +356,785 @@
   <!-- Transaction confirmation modal -->
   <div id="transaction-modal" class="modal">
     <div class="modal-content">
-      <span class="close">&times;</span>
-      <h2>Confirm Transaction</h2>
-      <p id="transaction-details"></p>
-      
-      <div id="chain-selection-container">
-        <h3>Source Chain</h3>
-        <div id="source-chain-options" class="chain-selection"></div>
-        
-        <h3>Destination Chain</h3>
-        <div id="destination-chain-options" class="chain-selection"></div>
+      <div class="modal-header">
+        <h2>Confirm Transaction</h2>
+        <button class="modal-close" id="modal-close">&times;</button>
       </div>
-      
-      <div id="token-selection-container">
-        <h3>Token</h3>
-        <div id="token-options" class="token-selection"></div>
+      <div class="modal-body" id="transaction-details">
+        <!-- Transaction details will be inserted here -->
       </div>
-      
-      <div id="amount-container">
-        <h3>Amount</h3>
-        <div class="amount-input">
-          <input type="text" id="amount-input" placeholder="0.0">
-          <span id="token-symbol">USDC</span>
-        </div>
-      </div>
-      
-      <div id="gas-preference-container">
-        <h3>Gas Preference</h3>
-        <div class="gas-preferences">
-          <div class="gas-option" data-preference="low">Low</div>
-          <div class="gas-option selected" data-preference="normal">Normal</div>
-          <div class="gas-option" data-preference="high">High</div>
-        </div>
-      </div>
-      
-      <div id="balance-info"></div>
-      
-      <div class="modal-buttons">
-        <button id="cancel-transaction" class="modal-button cancel-button">Cancel</button>
-        <button id="confirm-transaction" class="modal-button confirm-button">Confirm</button>
+      <div class="modal-footer">
+        <button id="cancel-transaction">Cancel</button>
+        <button id="confirm-transaction">Confirm</button>
       </div>
     </div>
   </div>
   
   <script>
-    // Global transaction tracking variables
-    let activeTxHash = null;
-    let currentTransaction = null;
-    let currentAccount = { address: null, isConnected: false };
-    
-    // Global variables for DOM elements to ensure they are initialized properly
-    let chatMessages;
-    let chatInput;
-    let sendButton;
-    let loadingIndicator;
-    let ethersStatus;
-    let modalElement;
-    let modalConfirmBtn;
-    let modalCancelBtn;
-    let modalCloseBtn;
-    let aiModelSelector;
-    
-    // Initialize the DOM elements after the document is fully loaded
     document.addEventListener('DOMContentLoaded', function() {
-      // Initialize DOM elements
-      chatMessages = document.getElementById('chat-messages');
-      chatInput = document.getElementById('chat-input');
-      sendButton = document.getElementById('send-button');
-      loadingIndicator = document.getElementById('loading-indicator');
-      ethersStatus = document.getElementById('ethers-status');
-      modalElement = document.getElementById('transaction-modal');
-      modalConfirmBtn = document.getElementById('confirm-transaction');
-      modalCancelBtn = document.getElementById('cancel-transaction');
-      modalCloseBtn = document.querySelector('.close');
-      aiModelSelector = document.getElementById('ai-model');
-      
-      // Show ethers loading status to user
-      ethersStatus.innerHTML = "Loading blockchain libraries...";
-      ethersStatus.style.display = "block";
-      
-      // Add welcome message
-      addSystemMessage("Hello! I can help you bridge tokens between chains using natural language. Try saying something like \"Send 100 USDC to Arbitrum\" or \"Bridge ETH from Ethereum to Base\".");
-      
-      // Check ethers loading status
-      setTimeout(function() {
-        if (typeof ethers !== 'undefined') {
-          ethersStatus.innerHTML = "Blockchain libraries loaded successfully!";
-          ethersStatus.classList.add('transaction-success');
-          // Hide the message after 3 seconds
-          setTimeout(() => {
-            ethersStatus.style.display = "none";
-          }, 3000);
-        } else {
-          ethersStatus.innerHTML = "Still loading blockchain libraries... This may take a moment.";
-          ethersStatus.classList.add('transaction-pending');
-        }
-      }, 1000);
-      
       // Add console log to show if wallet is detected
-      console.log('Checking for wallet...');
+      console.log('DOMContentLoaded - window.ethereum:', window.ethereum);
+      console.log('DOMContentLoaded - ethers available:', typeof ethers !== 'undefined');
+      
+      const chatMessages = document.getElementById('chat-messages');
+      const commandInput = document.getElementById('command-input');
+      const sendButton = document.getElementById('send-button');
+      const exampleCommands = document.querySelectorAll('.example-command');
+      const connectButton = document.getElementById('connect-wallet');
+      const disconnectButton = document.getElementById('disconnect-wallet');
+      const walletInfo = document.getElementById('wallet-info');
+      const walletAddress = document.getElementById('wallet-address');
+      const walletBalance = document.getElementById('wallet-balance');
+      
+      // Check for wallet and show appropriate message
+      if (!window.ethereum) {
+        console.warn('No Ethereum wallet detected');
+        // Add a message to the chat
+        const messageElement = document.createElement('div');
+        messageElement.className = 'message system-message';
+        messageElement.innerHTML = 'No Ethereum wallet detected. Please install <a href="https://metamask.io/" target="_blank">MetaMask</a> or another Ethereum wallet to use the wallet connection features.';
+        chatMessages.appendChild(messageElement);
+        
+        // Also update the connect button
+        connectButton.textContent = 'Install Wallet';
+        connectButton.addEventListener('click', function() {
+          window.open('https://metamask.io/', '_blank');
+        }, { once: true }); // Remove the original click handler
+      }
+      
+      // Transaction modal elements
+      const transactionModal = document.getElementById('transaction-modal');
+      const modalClose = document.getElementById('modal-close');
+      const cancelTransaction = document.getElementById('cancel-transaction');
+      const confirmTransaction = document.getElementById('confirm-transaction');
+      const transactionDetails = document.getElementById('transaction-details');
+      
+      let currentTransaction = null;
+      let currentAccount = null;
+      let walletClient = null;
+      
+      // Configure wagmi
+      const config = window.wagmi?.createConfig ? window.wagmi.createConfig({
+        chains: [
+          window.chains.mainnet,
+          window.chains.base,
+          window.chains.optimism,
+          window.chains.arbitrum,
+          window.chains.polygon
+        ],
+        transports: {
+          [window.chains.mainnet.id]: window.viem?.http ? window.viem.http() : null,
+          [window.chains.base.id]: window.viem?.http ? window.viem.http() : null,
+          [window.chains.optimism.id]: window.viem?.http ? window.viem.http() : null,
+          [window.chains.arbitrum.id]: window.viem?.http ? window.viem.http() : null,
+          [window.chains.polygon.id]: window.viem?.http ? window.viem.http() : null
+        }
+      }) : null;
+      
+      // Watch for account changes if wagmi is available
+      let unwatch;
+      if (window.wagmi?.watchAccount && config) {
+        unwatch = window.wagmi.watchAccount(config, {
+          onChange(account) {
+            handleAccountChange(account);
+          }
+        });
+      }
+      
+      // Listen for account changes directly from ethereum provider
       if (window.ethereum) {
-        console.log('Wallet detected!');
-        checkConnection();
-      } else {
-        console.log('No wallet detected');
-        addSystemMessage("No wallet detected. Please install MetaMask or another Ethereum wallet to use this app.", "transaction-error");
+        window.ethereum.on('accountsChanged', (accounts) => {
+          console.log('accountsChanged event triggered:', accounts);
+          if (accounts.length > 0) {
+            currentAccount = {
+              address: accounts[0],
+              isConnected: true
+            };
+          } else {
+            currentAccount = {
+              isConnected: false
+            };
+          }
+          handleAccountChange(currentAccount);
+        });
       }
       
-      // Set up event listeners
-      sendButton.addEventListener('click', handleSendMessage);
+      // Handle account change
+      function handleAccountChange(account) {
+        currentAccount = account;
+        
+        if (account.isConnected) {
+          connectButton.style.display = 'none';
+          disconnectButton.style.display = 'block';
+          walletInfo.style.display = 'flex';
+          
+          // Format address
+          const address = account.address;
+          const formattedAddress = `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
+          walletAddress.textContent = formattedAddress;
+          
+          // Get balance
+          fetchBalance(account.address);
+          
+          // Create wallet client for transactions
+          createWalletClient();
+          
+          // Add system message about connection
+          addMessage(`Connected to wallet ${formattedAddress}. You can now bridge tokens!`, 'system');
+        } else {
+          connectButton.style.display = 'block';
+          disconnectButton.style.display = 'none';
+          walletInfo.style.display = 'none';
+          walletBalance.textContent = '0 ETH';
+          walletAddress.textContent = '';
+          walletClient = null;
+        }
+      }
       
-      chatInput.addEventListener('keydown', function(event) {
-        if (event.key === 'Enter' && !event.shiftKey) {
-          event.preventDefault();
-          handleSendMessage();
+      // Create wallet client
+      async function createWalletClient() {
+        try {
+          if (window.ethereum) {
+            walletClient = window.viem.createWalletClient({
+              account: currentAccount.address,
+              transport: window.viem.custom(window.ethereum)
+            });
+          }
+        } catch (error) {
+          console.error('Error creating wallet client:', error);
+        }
+      }
+      
+      // Fetch wallet balance
+      async function fetchBalance(address) {
+        try {
+          // For this example, just use a simple fetch to an API endpoint
+          // In a real app, you'd use viem's getBalance or a similar function
+          fetch(`/api/balance?address=${address}`)
+            .then(response => response.json())
+            .then(data => {
+              if (data.success) {
+                walletBalance.textContent = `${data.balance} ETH`;
+              }
+            })
+            .catch(error => {
+              console.error('Error fetching balance:', error);
+              walletBalance.textContent = 'Error';
+            });
+        } catch (error) {
+          console.error('Error fetching balance:', error);
+          walletBalance.textContent = 'Error';
+        }
+      }
+      
+      // Connect wallet
+      connectButton.addEventListener('click', async () => {
+        try {
+          console.log('Connect button clicked');
+          console.log('window.ethereum exists:', !!window.ethereum);
+          
+          if (!window.ethereum) {
+            throw new Error('No wallet found. Please install MetaMask or another Ethereum wallet.');
+          }
+          
+          // Add system message about connection attempt
+          addMessage('Attempting to connect to wallet...', 'system');
+          
+          // Request account access directly from provider
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          console.log('Accounts:', accounts);
+          
+          if (accounts && accounts.length > 0) {
+            // Set current account
+            currentAccount = {
+              address: accounts[0],
+              isConnected: true
+            };
+            
+            handleAccountChange(currentAccount);
+          } else {
+            throw new Error('No accounts found after connection');
+          }
+        } catch (error) {
+          console.error('Error connecting wallet:', error);
+          addMessage(`Error connecting wallet: ${error.message}. Make sure you have MetaMask or another Ethereum wallet installed.`, 'system');
         }
       });
       
-      // Set up modal event listeners
-      if (modalConfirmBtn) {
-        modalConfirmBtn.addEventListener('click', function() {
-          executeTransaction();
-        });
-      }
-      
-      if (modalCancelBtn) {
-        modalCancelBtn.addEventListener('click', function() {
-          closeModal();
-        });
-      }
-      
-      if (modalCloseBtn) {
-        modalCloseBtn.addEventListener('click', function() {
-          closeModal();
-        });
-      }
-      
-      // AI model selection listener
-      if (aiModelSelector) {
-        aiModelSelector.addEventListener('change', function() {
-          const selectedModel = aiModelSelector.value;
-          addSystemMessage(`Switching to ${selectedModel === 'openai' ? 'OpenAI (GPT-4)' : 'Google Gemini'} model for processing your requests.`);
-          localStorage.setItem('preferred_ai_model', selectedModel);
-        });
-        
-        // Load saved preference if available
-        const savedModel = localStorage.getItem('preferred_ai_model');
-        if (savedModel) {
-          aiModelSelector.value = savedModel;
-        }
-      }
-      
-      // Set ethers status when ethers is loaded or failed
-      document.addEventListener('ethersLoaded', function() {
-        if (ethersStatus) {
-          ethersStatus.innerHTML = "Blockchain libraries loaded successfully!";
-          ethersStatus.classList.add('transaction-success');
-          ethersStatus.classList.remove('transaction-pending');
-          // Hide the message after 3 seconds
-          setTimeout(() => {
-            ethersStatus.style.display = "none";
-          }, 3000);
+      // Disconnect wallet
+      disconnectButton.addEventListener('click', async () => {
+        try {
+          await window.wagmi.disconnect(config);
+          addMessage('Wallet disconnected.', 'system');
+        } catch (error) {
+          console.error('Error disconnecting wallet:', error);
         }
       });
       
-      // UI initialization
-      if (loadingIndicator) {
-        loadingIndicator.style.display = 'none';
+      // Add event listeners
+      sendButton.addEventListener('click', sendCommand);
+      commandInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          sendCommand();
+        }
+      });
+      
+      // Example command click handler
+      exampleCommands.forEach(command => {
+        command.addEventListener('click', function() {
+          commandInput.value = this.textContent;
+          commandInput.focus();
+        });
+      });
+      
+      // Modal event listeners
+      modalClose.addEventListener('click', closeModal);
+      cancelTransaction.addEventListener('click', closeModal);
+      confirmTransaction.addEventListener('click', executeTransaction);
+      
+      // Close modal
+      function closeModal() {
+        transactionModal.classList.remove('open');
+        currentTransaction = null;
       }
-    });
-    
-    // Helper function to add messages to the chat
-    function addMessage(text, type) {
-      // Make sure chatMessages is initialized
-      if (!chatMessages) chatMessages = document.getElementById('chat-messages');
-      if (!chatMessages) return;
       
-      const messageElement = document.createElement('div');
-      messageElement.className = `message ${type}-message`;
-      messageElement.innerHTML = text;
-      chatMessages.appendChild(messageElement);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      return messageElement;
-    }
-    
-    function addSystemMessage(text, className = "") {
-      // Make sure chatMessages is initialized
-      if (!chatMessages) chatMessages = document.getElementById('chat-messages');
-      if (!chatMessages) return;
-      
-      const messageElement = document.createElement('div');
-      messageElement.className = `message system-message ${className}`;
-      messageElement.innerHTML = text;
-      chatMessages.appendChild(messageElement);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-      return messageElement;
-    }
-  
-    // Handle sending a message
-    function handleSendMessage() {
-      if (!chatInput) return;
-      
-      const messageText = chatInput.value.trim();
-      
-      if (messageText === '') return;
-      
-      // Add user message to the chat
-      addMessage(messageText, 'user');
-      
-      // Clear input field
-      chatInput.value = '';
-      
-      // Process the command
-      processCommand(messageText);
-    }
-    
-    // Process the user's command
-    async function processCommand(command) {
-      if (!loadingIndicator) return;
-      
-      loadingIndicator.style.display = 'block';
-      
-      try {
-        // Get the currently selected AI model
-        const selectedModel = aiModelSelector ? aiModelSelector.value : 'openai';
+      // Open modal with transaction details
+      function openTransactionModal(transaction) {
+        if (!transaction) {
+          console.error('Attempted to open transaction modal with no transaction data');
+          return;
+        }
         
-        const response = await fetch('/api/process-command', {
+        // Ensure all required fields exist
+        if (!transaction.sourceChain || !transaction.destinationChain || !transaction.token) {
+          console.error('Transaction missing required fields', transaction);
+          addMessage('Cannot process transaction: missing required information', 'system');
+          return;
+        }
+        
+        // Clone transaction to prevent reference issues
+        currentTransaction = {...transaction};
+        
+        // Set default gas preference if not present
+        if (!currentTransaction.gasPreference) {
+          currentTransaction.gasPreference = 'normal';
+        }
+        
+        // Check if Stargate supports this route
+        const isStargateSupported = checkStargateSupport(currentTransaction.sourceChain, 
+          currentTransaction.destinationChain, 
+          currentTransaction.token);
+        
+        // Format transaction details for display
+        const details = `
+          <div>
+            <p><strong>Operation:</strong> Bridge tokens</p>
+            <p><strong>Source Chain:</strong> ${currentTransaction.sourceChain}</p>
+            <p><strong>Destination Chain:</strong> ${currentTransaction.destinationChain}</p>
+            <p><strong>Token:</strong> ${currentTransaction.token}</p>
+            <p><strong>Amount:</strong> ${currentTransaction.amount || '0'}</p>
+            <p><strong>Gas Preference:</strong> ${currentTransaction.gasPreference}</p>
+            ${isStargateSupported ? 
+              '<p><strong>Bridge Provider:</strong> <span style="color: #3B48DF;">Stargate Protocol</span></p>' : 
+              '<p><strong>Note:</strong> <span style="color: #EF4444;">This route may not be supported by Stargate</span></p>'}
+          </div>
+        `;
+        
+        transactionDetails.innerHTML = details;
+        transactionModal.classList.add('open');
+        
+        console.log('Transaction modal opened with data:', currentTransaction);
+      }
+      
+      // Check if Stargate supports this route
+      function checkStargateSupport(sourceChain, destinationChain, token) {
+        // Convert to lowercase for comparison
+        const src = sourceChain.toLowerCase();
+        const dst = destinationChain.toLowerCase();
+        const tkn = token.toLowerCase();
+        
+        // Define supported chains
+        const supportedChains = ['ethereum', 'base', 'optimism', 'arbitrum', 'polygon'];
+        
+        // Define supported tokens
+        const supportedTokens = ['eth', 'usdc', 'usdt'];
+        
+        // Check if chains and token are supported
+        if (!supportedChains.includes(src) || !supportedChains.includes(dst)) {
+          return false;
+        }
+        
+        if (!supportedTokens.includes(tkn)) {
+          return false;
+        }
+        
+        // Special case: ETH is not supported on Polygon via Stargate
+        if (tkn === 'eth' && (src === 'polygon' || dst === 'polygon')) {
+          return false;
+        }
+        
+        return true;
+      }
+      
+      // Execute transaction
+      async function executeTransaction() {
+        try {
+          // Check if current transaction exists
+          if (!currentTransaction) {
+            console.warn('No current transaction to execute');
+            return;
+          }
+          
+          // Check if wallet is connected
+          if (!currentAccount || !currentAccount.isConnected) {
+            closeModal();
+            addMessage('Please connect your wallet first.', 'system');
+            return;
+          }
+          
+          // Verify ethers is available
+          if (typeof ethers === 'undefined') {
+            console.error('Ethers library not available. Attempting to load from backup sources...');
+            
+            try {
+              // Try loading from CDN as fallback
+              const script = document.createElement('script');
+              script.src = '/js/ethers-5.7.2.umd.min.js'; // Try local copy first
+              
+              // Create a promise to wait for the script to load
+              await new Promise((resolve, reject) => {
+                script.onload = resolve;
+                script.onerror = reject;
+                document.head.appendChild(script);
+                // Set a timeout to avoid hanging
+                setTimeout(() => reject(new Error('Ethers load timeout')), 5000);
+              });
+              
+              // Check if ethers is now available
+              if (typeof ethers === 'undefined') {
+                throw new Error('Failed to load ethers library even after fallback attempt.');
+              }
+              console.log('Ethers library loaded successfully from fallback');
+            } catch (ethersLoadError) {
+              console.error('Failed to load ethers:', ethersLoadError);
+              closeModal();
+              addMessage('Error: Unable to load required libraries. Please reload the page and try again.', 'system').classList.add('transaction-error');
+              return;
+            }
+          }
+          
+          // Store transaction locally so it's not affected by closeModal
+          const transaction = {...currentTransaction};
+          
+          // Show pending status
+          closeModal();
+          const statusMessage = addMessage('Processing your transaction...', 'system');
+          statusMessage.classList.add('transaction-pending');
+        
+          // Add gas preference if not present
+          if (!transaction.gasPreference) {
+            transaction.gasPreference = 'normal';
+          }
+          
+          // Call the backend API for the bridging parameters
+          const response = await fetch('/api/execute-bridge', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              ...transaction,
+              walletAddress: currentAccount.address
+            })
+          });
+          
+          if (!response.ok) {
+            // Handle HTTP errors
+            const errorText = await response.text();
+            console.error('Server error:', response.status, errorText);
+            throw new Error(`Server returned ${response.status}: ${errorText || 'Unknown error'}`);
+          }
+          
+          const data = await response.json();
+          
+          // Handle Stargate Protocol direct interaction
+          if (data.useStargate) {
+            try {
+              statusMessage.innerHTML = "Preparing Stargate transaction...";
+              
+              // Get the parameters from the backend
+              const params = data.implementationStatus;
+              console.log("Stargate parameters:", params);
+              
+              // We need the provider from the user's wallet
+              if (!window.ethereum) {
+                throw new Error('No Ethereum provider found. Please install MetaMask or another wallet.');
+              }
+              
+              // Explicit check for ethers again
+              if (typeof ethers === 'undefined' || typeof ethers.providers === 'undefined') {
+                throw new Error('Ethers library or providers not available. Please reload the page.');
+              }
+              
+              const provider = new ethers.providers.Web3Provider(window.ethereum);
+              const signer = provider.getSigner();
+              
+              // Log successful creation of provider and signer
+              console.log("Provider and signer created successfully");
+              
+              // Stargate Router ABI (minimal for swap function)
+              const stargateRouterABI = [
+                "function swap(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, uint lzTxParams, bytes calldata _to, bytes calldata _payload) payable external",
+                "function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, uint lzTxParams) external view returns (uint256, uint256)"
+              ];
+              
+              // Create contract interface for Stargate Router
+              const routerAddress = params.stargateRouterAddress;
+              console.log("Using Stargate router address:", routerAddress);
+              const stargateRouter = new ethers.Contract(routerAddress, stargateRouterABI, signer);
+              
+              // Convert wallet address to bytes format for the destination
+              const addressToBytes = function(addr) {
+                return ethers.utils.defaultAbiCoder.encode(['address'], [addr]);
+              };
+              
+              // Prepare parameters for the swap call
+              const dstChainId = params.destChainId;
+              const srcPoolId = params.srcPoolId;
+              const dstPoolId = params.dstPoolId;
+              const refundAddress = currentAccount.address;
+              const amountLD = params.amountWithDecimals;
+              const slippage = 0.005; // 0.5% slippage allowance
+              const minAmountLD = ethers.BigNumber.from(amountLD)
+                .mul(ethers.BigNumber.from(10000 - Math.floor(slippage * 10000)))
+                .div(ethers.BigNumber.from(10000));
+              
+              const lzTxParams = 0; // Default params
+              const to = addressToBytes(currentAccount.address);
+              const payload = '0x'; // Empty payload
+              
+              // First we need to estimate the LayerZero fee
+              statusMessage.innerHTML = "Estimating cross-chain fee...";
+              
+              console.log("Quoting LayerZero fee with parameters:", {
+                dstChainId,
+                functionType: 1,
+                to,
+                payload,
+                lzTxParams
+              });
+              
+              // Request the quote from the contract
+              const [nativeFee, zroFee] = await stargateRouter.quoteLayerZeroFee(
+                dstChainId,
+                1, // function type for swap
+                to,
+                payload,
+                lzTxParams
+              );
+              
+              console.log("Received fee quote:", {
+                nativeFee: ethers.utils.formatEther(nativeFee),
+                zroFee: ethers.utils.formatEther(zroFee)
+              });
+              
+              statusMessage.innerHTML = `Initiating Stargate bridge transaction... (Fee: ${ethers.utils.formatEther(nativeFee)} ETH)`;
+              
+              // Check if we're dealing with a token that requires approval
+              if (!params.isEth) {
+                // For ERC20 tokens, we need to approve the Stargate Router first
+                statusMessage.innerHTML = "Checking token approval...";
+                
+                const tokenABI = [
+                  "function approve(address spender, uint256 amount) external returns (bool)",
+                  "function allowance(address owner, address spender) external view returns (uint256)"
+                ];
+                
+                const tokenAddress = params.tokenAddress;
+                console.log("Token address:", tokenAddress);
+                const tokenContract = new ethers.Contract(tokenAddress, tokenABI, signer);
+                
+                // Check current allowance
+                const allowance = await tokenContract.allowance(currentAccount.address, routerAddress);
+                console.log("Current allowance:", allowance.toString());
+                
+                if (allowance.lt(ethers.BigNumber.from(amountLD))) {
+                  statusMessage.innerHTML = "Approving tokens for bridge transfer...";
+                  
+                  try {
+                    // Request approval
+                    const approveTx = await tokenContract.approve(
+                      routerAddress,
+                      ethers.constants.MaxUint256 // Approve max amount for efficient future transactions
+                    );
+                    
+                    statusMessage.innerHTML = "Waiting for approval transaction...";
+                    await approveTx.wait();
+                    console.log("Approval confirmed with hash:", approveTx.hash);
+                    statusMessage.innerHTML = "Token approval confirmed! Proceeding with bridge...";
+                  } catch (approvalError) {
+                    console.error("Error approving token:", approvalError);
+                    
+                    if (approvalError.code === 4001) {
+                      statusMessage.classList.remove('transaction-pending');
+                      statusMessage.classList.add('transaction-error');
+                      statusMessage.innerHTML = `<strong>Transaction cancelled:</strong> You rejected the token approval.`;
+                      return;
+                    }
+                    
+                    throw new Error(`Failed to approve token: ${approvalError.message}`);
+                  }
+                }
+              }
+              
+              console.log("Preparing swap with parameters:", {
+                dstChainId,
+                srcPoolId,
+                dstPoolId,
+                refundAddress,
+                amountLD: amountLD.toString(),
+                minAmountLD: minAmountLD.toString(),
+                lzTxParams,
+                to,
+                payload
+              });
+              
+              // Send the transaction
+              let tx;
+              try {
+                if (params.isEth) {
+                  // For ETH, we need to send the amount + gas fee
+                  const totalValue = ethers.BigNumber.from(amountLD).add(nativeFee);
+                  console.log("Sending total value:", ethers.utils.formatEther(totalValue));
+                  
+                  tx = await stargateRouter.swap(
+                    dstChainId,
+                    srcPoolId,
+                    dstPoolId,
+                    refundAddress,
+                    amountLD,
+                    minAmountLD,
+                    lzTxParams,
+                    to,
+                    payload,
+                    { value: totalValue }
+                  );
+                } else {
+                  // For ERC20 tokens, just need to pay the gas fee
+                  tx = await stargateRouter.swap(
+                    dstChainId,
+                    srcPoolId,
+                    dstPoolId,
+                    refundAddress,
+                    amountLD,
+                    minAmountLD,
+                    lzTxParams,
+                    to,
+                    payload,
+                    { value: nativeFee }
+                  );
+                }
+              } catch (swapError) {
+                console.error("Error sending swap transaction:", swapError);
+                
+                if (swapError.code === 4001) {
+                  statusMessage.classList.remove('transaction-pending');
+                  statusMessage.classList.add('transaction-error');
+                  statusMessage.innerHTML = `<strong>Transaction cancelled:</strong> You rejected the swap transaction.`;
+                  return;
+                }
+                
+                // Check for insufficient funds
+                if (swapError.code === 'INSUFFICIENT_FUNDS' || 
+                    (swapError.message && swapError.message.includes('insufficient funds'))) {
+                  statusMessage.classList.remove('transaction-pending');
+                  statusMessage.classList.add('transaction-error');
+                  statusMessage.innerHTML = `<strong>Transaction failed:</strong> Insufficient funds for transaction. Make sure you have enough funds to cover the amount plus gas fees.`;
+                  return;
+                }
+                
+                throw swapError;
+              }
+              
+              console.log("Transaction submitted:", tx.hash);
+              statusMessage.innerHTML = "Transaction submitted! Waiting for confirmation...";
+              
+              // Wait for transaction to be mined
+              const receipt = await tx.wait();
+              console.log("Transaction confirmed:", receipt);
+              
+              // Determine the explorer URL
+              let explorerUrl = '';
+              switch (params.sourceChain) {
+                case 'ethereum':
+                  explorerUrl = `https://etherscan.io/tx/${receipt.transactionHash}`;
+                  break;
+                case 'base':
+                  explorerUrl = `https://basescan.org/tx/${receipt.transactionHash}`;
+                  break;
+                case 'optimism':
+                  explorerUrl = `https://optimistic.etherscan.io/tx/${receipt.transactionHash}`;
+                  break;
+                case 'arbitrum':
+                  explorerUrl = `https://arbiscan.io/tx/${receipt.transactionHash}`;
+                  break;
+                case 'polygon':
+                  explorerUrl = `https://polygonscan.com/tx/${receipt.transactionHash}`;
+                  break;
+                default:
+                  explorerUrl = `https://etherscan.io/tx/${receipt.transactionHash}`;
+              }
+              
+              statusMessage.classList.remove('transaction-pending');
+              statusMessage.classList.add('transaction-success');
+              statusMessage.innerHTML = `Stargate bridge transaction confirmed! <a href="${explorerUrl}" target="_blank">View on block explorer</a><br>
+                <small>Note: It may take a few minutes for funds to appear on the destination chain.</small>`;
+              
+            } catch (stargateError) {
+              console.error('Stargate transaction error:', stargateError);
+              statusMessage.classList.remove('transaction-pending');
+              statusMessage.classList.add('transaction-error');
+              
+              // User rejected transaction
+              if (stargateError.code === 4001) {
+                statusMessage.innerHTML = `<strong>Transaction cancelled:</strong> You rejected the transaction.`;
+                return;
+              }
+              
+              // Gas estimation failed - likely insufficient funds for gas
+              if (stargateError.code === -32603 || (stargateError.message && stargateError.message.includes('gas'))) {
+                statusMessage.innerHTML = `<strong>Transaction failed:</strong> Insufficient funds for gas fees.`;
+                return;
+              }
+              
+              statusMessage.innerHTML = `<strong>Stargate transaction failed:</strong> ${stargateError.message || 'Unknown error'}<br>
+                <small>This could be due to insufficient funds, slippage issues, or network congestion.</small>`;
+            }
+          } else {
+            statusMessage.classList.remove('transaction-pending');
+            statusMessage.classList.add('transaction-error');
+            
+            // Different handling for different error types
+            if (data.implementationStatus) {
+              // This is the case for real transactions that are in progress of being implemented
+              const details = JSON.stringify(data.implementationStatus, null, 2);
+              statusMessage.innerHTML = `<strong>${data.message}:</strong> ${data.error}<br>
+                <details>
+                  <summary>Transaction Details</summary>
+                  <pre>${details}</pre>
+                </details>`;
+            } else {
+              // Generic error
+              statusMessage.textContent = `Transaction failed: ${data.error || 'Unknown error'}`;
+            }
+          }
+        } catch (error) {
+          console.error('Error executing transaction:', error);
+          const statusMessage = document.querySelector('.transaction-pending');
+          if (statusMessage) {
+            statusMessage.classList.remove('transaction-pending');
+            statusMessage.classList.add('transaction-error');
+            statusMessage.textContent = `Transaction failed: ${error.message || 'Unknown error'}`;
+          } else {
+            addMessage(`Transaction failed: ${error.message || 'Unknown error'}`, 'system').classList.add('transaction-error');
+          }
+        }
+      }
+      
+      // Function to send the command to the server
+      function sendCommand() {
+        const command = commandInput.value.trim();
+        
+        if (!command) return;
+        
+        // Add user message to chat
+        addMessage(command, 'user');
+        
+        // Clear input
+        commandInput.value = '';
+        
+        // Send to server
+        fetch('/api/nlp', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            command,
-            walletAddress: currentAccount.address,
-            aiModel: selectedModel
-          })
+          body: JSON.stringify({ command })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            // Format and display the response
+            const result = data.result;
+            let responseText = '';
+            
+            if (result) {
+              // If it's a bridge command with all necessary parameters, show confirmation
+              if (result.sourceChain && result.destinationChain && result.token) {
+                responseText = `I'll help you bridge ${result.amount || 'your'} ${result.token} from ${result.sourceChain} to ${result.destinationChain} with ${result.gasPreference} gas.`;
+                
+                // Show confirmation if user is connected
+                if (currentAccount && currentAccount.isConnected) {
+                  setTimeout(() => {
+                    openTransactionModal(result);
+                  }, 1000);
+                } else {
+                  responseText += '<br><br>Please connect your wallet to continue.';
+                }
+              } else {
+                responseText = `I understood your command:<br><br>
+                <pre>${JSON.stringify(result, null, 2)}</pre>`;
+              }
+            } else {
+              responseText = "I couldn't understand your command. Please try again with a different phrasing.";
+            }
+            
+            // Add system message to chat
+            addMessage(responseText, 'system');
+          } else {
+            addMessage(`Error: ${data.message}`, 'system');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          addMessage('Sorry, there was an error processing your request.', 'system');
         });
-        
-        const data = await response.json();
-        
-        // Display response
-        addSystemMessage(data.message);
-        
-        // Check if we have a transaction
-        if (data.transaction) {
-          currentTransaction = data.transaction;
-          showConfirmationModal(data.transaction);
-        }
-      } catch (error) {
-        console.error('Error processing command:', error);
-        addSystemMessage(`Error: ${error.message || 'Could not process your command.'}`, 'transaction-error');
-      } finally {
-        loadingIndicator.style.display = 'none';
       }
-    }
+      
+      // Function to add a message to the chat
+      function addMessage(text, sender) {
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${sender}-message`;
+        messageElement.innerHTML = text;
+        
+        chatMessages.appendChild(messageElement);
+        
+        // Scroll to bottom
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        
+        return messageElement;
+      }
+      
+      // Initialize account state
+      if (window.ethereum) {
+        window.ethereum.request({ method: 'eth_accounts' })
+          .then(accounts => {
+            console.log('Initial accounts:', accounts);
+            if (accounts && accounts.length > 0) {
+              currentAccount = {
+                address: accounts[0],
+                isConnected: true
+              };
+              handleAccountChange(currentAccount);
+            }
+          })
+          .catch(error => {
+            console.error('Error getting initial accounts:', error);
+          });
+      } else {
+        console.log('No ethereum provider detected during initialization');
+      }
+    });
   </script>
 </body>
 </html> 

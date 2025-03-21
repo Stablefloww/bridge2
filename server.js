@@ -116,10 +116,10 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// API endpoint for processing commands with AI model selection
-app.post('/api/process-command', async (req, res) => {
+// API endpoint for NLP processing
+app.post('/api/nlp', async (req, res) => {
   try {
-    const { command, walletAddress, aiModel = 'openai' } = req.body;
+    const { command } = req.body;
     
     if (!command) {
       return res.status(400).json({ 
@@ -128,108 +128,17 @@ app.post('/api/process-command', async (req, res) => {
       });
     }
     
-    console.log(`Processing command: "${command}" with AI model: ${aiModel}`);
-    
-    // Process the command with the selected AI model
-    let result;
-    try {
-      if (aiModel === 'gemini') {
-        // Use Google Gemini model for processing
-        console.log('Using Google Gemini for NLP processing');
-        // For now, we'll use the same processing function, but in a real app
-        // you would implement a specific handler for Gemini
-        result = await processNLPCommand(command, 'gemini');
-      } else {
-        // Default to OpenAI
-        console.log('Using OpenAI for NLP processing');
-        result = await processNLPCommand(command, 'openai');
-      }
-    } catch (nlpError) {
-      console.error('Error in NLP processing:', nlpError);
-      return res.json({
-        success: false,
-        message: `Error understanding your command: ${nlpError.message || 'Please try rephrasing.'}`,
-        error: nlpError.message
-      });
-    }
-    
-    // Check if we have a valid parsed command
-    if (!result || Object.keys(result).length === 0) {
-      return res.json({
-        success: true,
-        message: "I couldn't understand your command. Please try rephrasing with a more specific bridge instruction like 'Send 10 USDC to Base' or 'Bridge 0.1 ETH from Optimism to Arbitrum'."
-      });
-    }
-    
-    // Format user-friendly response
-    let responseMessage;
-    
-    if (result.sourceChain && result.destinationChain && result.token) {
-      // This is a bridge transaction with all necessary parameters
-      const amount = result.amount ? result.amount : 'an amount of';
-      const sourceChain = result.sourceChain.charAt(0).toUpperCase() + result.sourceChain.slice(1);
-      const destChain = result.destinationChain.charAt(0).toUpperCase() + result.destinationChain.slice(1);
-      const token = result.token.toUpperCase();
-      const gasPreference = result.gasPreference || 'normal';
-      
-      responseMessage = `I'll help you bridge ${amount} ${token} from ${sourceChain} to ${destChain} with ${gasPreference} gas.`;
-      
-      // If wallet address is provided, we can return transaction info
-      if (walletAddress) {
-        responseMessage += ` Please review the details and confirm when ready.`;
-        
-        // Return transaction details for confirmation
-        return res.json({
-          success: true,
-          message: responseMessage,
-          transaction: {
-            sourceChain: result.sourceChain,
-            destinationChain: result.destinationChain,
-            token: result.token,
-            amount: result.amount || '0',
-            gasPreference: result.gasPreference || 'normal',
-            aiModel: aiModel // Include which AI model processed this
-          }
-        });
-      } else {
-        responseMessage += ` Please connect your wallet to continue.`;
-      }
-    } else {
-      // Partial understanding or other command
-      responseMessage = `I understood parts of your command, but I need more information:`;
-      
-      if (result.action && result.action === 'bridge') {
-        responseMessage += ` You want to bridge tokens`;
-        
-        if (result.token) {
-          responseMessage += ` (${result.token.toUpperCase()})`;
-        }
-        
-        if (result.sourceChain) {
-          responseMessage += ` from ${result.sourceChain}`;
-        }
-        
-        if (result.destinationChain) {
-          responseMessage += ` to ${result.destinationChain}`;
-        }
-        
-        responseMessage += `. Please provide the missing details.`;
-      } else {
-        responseMessage = `I couldn't fully understand your request. Try a command like "Bridge 10 USDC from Base to Arbitrum" or "Send 0.1 ETH to Optimism".`;
-      }
-    }
+    const result = await processNLPCommand(command);
     
     return res.json({
       success: true,
-      message: responseMessage,
-      parsedCommand: result,
-      aiModelUsed: aiModel
+      result
     });
   } catch (error) {
     console.error('Error processing command:', error);
     return res.status(500).json({ 
       success: false, 
-      message: 'Error processing your command', 
+      message: 'Error processing command', 
       error: error.message 
     });
   }
