@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
 import { getBridgeRoutes, executeBridge } from '../lib/bridge/providers';
 import { monitorTransaction, BRIDGE_STATUS } from '../lib/bridge/monitor';
-import { isGaslessSupported, estimateGaslessTransactionCost } from '../lib/gasless/biconomy';
+import { isGaslessSupported, estimateGaslessTransactionCost, executeStargateBridgeWithTokenFees } from '../lib/gasless/biconomy';
 import { getTokenContract } from '../lib/tokens/tokenUtils';
 
 /**
@@ -23,6 +23,8 @@ const useBridge = (signer) => {
   const [monitoringInterval, setMonitoringInterval] = useState(null);
   const [useGasAbstraction, setUseGasAbstraction] = useState(false);
   const [gaslessEstimate, setGaslessEstimate] = useState(null);
+  // Additional state for token fees option
+  const [useTokenFees, setUseTokenFees] = useState(false);
   
   /**
    * Fetch available bridge routes
@@ -139,6 +141,13 @@ const useBridge = (signer) => {
   }, []);
   
   /**
+   * Toggle token fees
+   */
+  const toggleTokenFees = useCallback(() => {
+    setUseTokenFees(prev => !prev);
+  }, []);
+  
+  /**
    * Execute the bridge transaction
    * @param {Object} params - Bridge parameters
    * @param {string} params.sourceChain - Source chain name
@@ -146,14 +155,19 @@ const useBridge = (signer) => {
    * @param {string} params.tokenSymbol - Token symbol
    * @param {string} params.amount - Amount to bridge
    * @param {number} params.slippageTolerance - Slippage tolerance in percentage
+   * @param {boolean} params.useTokenFees - Whether to pay fees in token (instead of ETH)
    */
   const bridge = useCallback(async ({
     sourceChain,
     destChain,
     tokenSymbol,
     amount,
-    slippageTolerance = 0.5
+    slippageTolerance = 0.5,
+    useTokenFeesParam
   }) => {
+    // Use the parameter if provided, otherwise use the state
+    const shouldUseTokenFees = useTokenFeesParam !== undefined ? useTokenFeesParam : useTokenFees;
+    
     if (!signer || !amount || !sourceChain || !destChain || !tokenSymbol) {
       setBridgeError('Missing required parameters for bridge');
       return;
@@ -165,16 +179,29 @@ const useBridge = (signer) => {
     clearMonitoring();
     
     try {
-      // Execute the bridge transaction
-      const result = await executeBridge({
-        sourceChain,
-        destChain,
-        tokenSymbol,
-        amount,
-        signer,
-        slippageTolerance,
-        useGasAbstraction // Pass the gas abstraction flag
-      });
+      let result;
+      
+      if (shouldUseTokenFees) {
+        // Execute the bridge with token fees (Biconomy + Stargate)
+        result = await executeStargateBridgeWithTokenFees({
+          sourceChain,
+          destChain,
+          tokenSymbol,
+          amount,
+          wallet: signer
+        });
+      } else {
+        // Execute the standard bridge transaction
+        result = await executeBridge({
+          sourceChain,
+          destChain,
+          tokenSymbol,
+          amount,
+          signer,
+          slippageTolerance,
+          useGasAbstraction // Pass the gas abstraction flag
+        });
+      }
       
       setBridgeResult(result);
       
@@ -193,7 +220,7 @@ const useBridge = (signer) => {
     } finally {
       setIsBridging(false);
     }
-  }, [signer, useGasAbstraction]);
+  }, [signer, useGasAbstraction, useTokenFees, clearMonitoring, startMonitoring]);
   
   /**
    * Start monitoring a bridge transaction
@@ -271,7 +298,9 @@ const useBridge = (signer) => {
     transactionStatus,
     useGasAbstraction,
     toggleGasAbstraction,
-    gaslessEstimate
+    gaslessEstimate,
+    useTokenFees,
+    toggleTokenFees
   };
 };
 

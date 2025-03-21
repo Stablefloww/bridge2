@@ -1,11 +1,11 @@
 import { ethers } from 'ethers';
 import { executeBridgeWithGasAbstraction, isGaslessSupported } from '../gasless/biconomy.js';
-import { getTokenContract, parseTokenAmount, formatTokenAmount } from '../tokens/tokenUtils.js';
+import { getTokenContract, parseTokenAmount, formatTokenAmount, isTokenSupportedOnChain, getSupportedChainsForToken } from '../tokens/tokenUtils.js';
 
 // Stargate Router ABI (minimal required for bridging)
 const STARGATE_ROUTER_ABI = [
-  'function swap(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, uint256 _lzTxParams, bytes calldata _to, bytes calldata _payload) payable',
-  'function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, uint256 _lzTxParams) external view returns (uint256, uint256)'
+  'function swap(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams, bytes calldata _to, bytes calldata _payload) payable external',
+  'function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams) external view returns (uint256, uint256)'
 ];
 
 // Stargate Pool ABI (minimal required for information and approvals)
@@ -86,6 +86,7 @@ const POOL_IDS = {
   },
   base: {
     USDC: 1,
+    USDT: 2,
     ETH: 13
   },
   polygon: {
@@ -106,10 +107,11 @@ const POOL_IDS = {
 };
 
 // Default Layer Zero Parameters (adapterParams)
-const defaultLzTxParams = ethers.solidityPacked(
-  ['uint16', 'uint256'],
-  [1, 200000] // version, gas
-);
+const defaultLzTxParams = {
+  dstGasForCall: 0,
+  dstNativeAmount: 0,
+  dstNativeAddr: '0x'
+};
 
 /**
  * Returns empty recipient address bytes for Stargate
@@ -230,10 +232,10 @@ export async function calculateStargateFees({
     }
     
     return {
-      nativeFee: ethers.utils.formatEther(nativeFee),
-      lzFee: ethers.utils.formatEther(lzFee),
+      nativeFee: ethers.formatEther(nativeFee),
+      lzFee: ethers.formatEther(lzFee),
       stargateFee: formatTokenAmount(stargateFee, decimals),
-      totalNativeFee: ethers.utils.formatEther(nativeFee), // in ETH
+      totalNativeFee: ethers.formatEther(nativeFee), // in ETH
       totalTokenFee: formatTokenAmount(stargateFee, decimals), // in token
       estimatedTimeMinutes
     };
@@ -309,13 +311,22 @@ export async function executeBridge({
       tokenAddress,
       [
         'function approve(address spender, uint256 amount) returns (bool)',
-        'function allowance(address owner, address spender) view returns (uint256)'
+        'function allowance(address owner, address spender) view returns (uint256)',
+        'function balanceOf(address owner) view returns (uint256)'
       ],
       signer
     );
     
     // Parse amount
-    const amountWei = ethers.utils.parseUnits(amount.toString(), decimals);
+    const amountWei = ethers.parseUnits(amount.toString(), decimals);
+
+    // Check if user has enough balance
+    const userAddress = await signer.getAddress();
+    const balance = await tokenContract.balanceOf(userAddress);
+    
+    if (balance.lt(amountWei)) {
+      throw new Error(`Insufficient ${tokenSymbol} balance. You have ${ethers.formatUnits(balance, decimals)} but need ${amount}`);
+    }
     
     // Calculate min amount with slippage
     const slippageBps = slippageTolerance * 100; // Convert to basis points
@@ -333,34 +344,57 @@ export async function executeBridge({
     // Get destination address
     const dstAddress = ethers.solidityPacked(
       ['address'],
-      [await signer.getAddress()]
+      [userAddress]
     );
     
     // Check allowance
-    const userAddress = await signer.getAddress();
-    const allowance = await tokenContract.allowance(userAddress, routerAddress);
+    let allowance;
+    try {
+      allowance = await tokenContract.allowance(userAddress, routerAddress);
+    } catch (error) {
+      console.error('Error checking allowance:', error);
+      throw new Error(`Failed to check token allowance: ${error.message}. Make sure you have the token on the source chain.`);
+    }
     
     // Approve if needed
     if (allowance.lt(amountWei)) {
       console.log('Approving token transfer...');
-      if (useGasAbstraction && isGaslessSupported(sourceChain, tokenSymbol)) {
-        // Use Biconomy for gasless approval
-        const approvalTx = await executeBridgeWithGasAbstraction({
-          chainName: sourceChain,
-          contract: tokenContract,
-          method: 'approve',
-          params: [routerAddress, ethers.MaxUint256],
-          wallet: signer
-        });
-        
-        console.log('Gasless approval successful:', approvalTx);
-      } else {
-        // Regular approval
-        const approveTx = await tokenContract.approve(
-          routerAddress,
-          ethers.MaxUint256
-        );
-        await approveTx.wait();
+      try {
+        if (useGasAbstraction && isGaslessSupported(sourceChain, tokenSymbol)) {
+          // Use Biconomy for gasless approval
+          const approvalTx = await executeBridgeWithGasAbstraction({
+            chainName: sourceChain,
+            contract: tokenContract,
+            method: 'approve',
+            params: [routerAddress, ethers.MaxUint256],
+            wallet: signer
+          });
+          
+          console.log('Gasless approval successful:', approvalTx);
+        } else {
+          // Regular approval
+          const approveTx = await tokenContract.approve(
+            routerAddress,
+            ethers.MaxUint256
+          );
+          await approveTx.wait();
+          console.log('Token approval confirmed');
+        }
+      } catch (error) {
+        console.error('Error approving token transfer:', error);
+        if (error.message.includes('insufficient funds')) {
+          // Get current ETH balance
+          const ethBalance = await signer.provider.getBalance(userAddress);
+          const formattedBalance = ethers.formatEther(ethBalance);
+          
+          // Estimate approval gas cost (typical approval costs around 50000 gas)
+          const gasPrice = await signer.provider.getGasPrice();
+          const estimatedGasCost = gasPrice.mul(50000);
+          const formattedGasCost = ethers.formatEther(estimatedGasCost);
+          
+          throw new Error(`Insufficient ETH for approval. You have ${formattedBalance} ETH but need approximately ${formattedGasCost} ETH for gas.`);
+        }
+        throw new Error(`Failed to approve token transfer: ${error.message}`);
       }
     }
     
@@ -378,34 +412,90 @@ export async function executeBridge({
     };
     
     // Calculate native value to send
-    const [nativeFee] = await routerContract.quoteLayerZeroFee(
-      swapParams._dstChainId,
-      1, // _functionType (swap)
-      swapParams._to,
-      swapParams._payload,
-      swapParams._lzTxParams
-    );
+    let nativeFee;
+    try {
+      [nativeFee] = await routerContract.quoteLayerZeroFee(
+        swapParams._dstChainId,
+        1, // _functionType (swap)
+        swapParams._to,
+        swapParams._payload,
+        swapParams._lzTxParams
+      );
+    } catch (error) {
+      console.error('Error calculating LayerZero fee:', error);
+      throw new Error(`Failed to calculate LayerZero fee: ${error.message}. The bridge may be temporarily unavailable.`);
+    }
+    
+    // Check if user has enough ETH for gas
+    const ethBalance = await signer.provider.getBalance(userAddress);
+    if (ethBalance.lt(nativeFee)) {
+      // Calculate total needed (fee + some gas for the transaction)
+      // Estimate ~150000 gas for a typical bridge transaction
+      const gasPrice = await signer.provider.getGasPrice();
+      const txGas = gasPrice.mul(150000); // Estimate for the transaction gas
+      const totalNeeded = nativeFee.add(txGas);
+      
+      // Format balances for error message
+      const formattedBalance = ethers.formatEther(ethBalance);
+      const formattedNativeFee = ethers.formatEther(nativeFee);
+      const formattedTxGas = ethers.formatEther(txGas);
+      const formattedTotal = ethers.formatEther(totalNeeded);
+      
+      throw new Error(`Insufficient funds for gas fees. You have ${formattedBalance} ETH but need ${formattedTotal} ETH (${formattedNativeFee} for bridge fees + ~${formattedTxGas} for transaction gas)`);
+    }
     
     // Execute bridge transaction
     let tx;
     
-    if (useGasAbstraction && isGaslessSupported(sourceChain, tokenSymbol)) {
-      // Use Biconomy for gasless transaction
-      tx = await executeBridgeWithGasAbstraction({
-        chainName: sourceChain,
-        contract: routerContract,
-        method: 'swap',
-        params: Object.values(swapParams),
-        wallet: signer,
-        value: nativeFee
-      });
-    } else {
-      // Regular transaction
-      tx = await routerContract.swap(
-        ...Object.values(swapParams),
-        { value: nativeFee }
-      );
-      await tx.wait();
+    try {
+      if (useGasAbstraction && isGaslessSupported(sourceChain, tokenSymbol)) {
+        // Use Biconomy for gasless transaction
+        tx = await executeBridgeWithGasAbstraction({
+          chainName: sourceChain,
+          contract: routerContract,
+          method: 'swap',
+          params: Object.values(swapParams),
+          wallet: signer,
+          value: nativeFee
+        });
+      } else {
+        // Regular transaction
+        tx = await routerContract.swap(
+          ...Object.values(swapParams),
+          { value: nativeFee }
+        );
+        await tx.wait();
+      }
+    } catch (error) {
+      console.error('Bridge execution error:', error);
+      
+      // Check for specific errors and provide helpful messages
+      if (error.message.includes('user rejected')) {
+        throw new Error('Transaction rejected by user');
+      } else if (error.message.includes('insufficient funds')) {
+        // Get current ETH balance
+        const ethBalance = await signer.provider.getBalance(userAddress);
+        const formattedBalance = ethers.formatEther(ethBalance);
+        const formattedNativeFee = ethers.formatEther(nativeFee);
+        
+        // Estimate additional gas costs
+        const gasPrice = await signer.provider.getGasPrice();
+        const txGas = gasPrice.mul(150000); // Estimate for the transaction gas
+        const formattedTxGas = ethers.formatEther(txGas);
+        const totalNeeded = ethers.formatEther(nativeFee.add(txGas));
+        
+        throw new Error(`Insufficient funds for gas fees. You have ${formattedBalance} ETH but need approximately ${totalNeeded} ETH (${formattedNativeFee} for bridge fees + ~${formattedTxGas} for transaction gas)`);
+      } else if (error.message.includes('CALL_EXCEPTION')) {
+        if (error.message.includes('allowance')) {
+          throw new Error('Token approval failed. Please try again or check if the token contract is working correctly');
+        } else if (error.message.includes('quoteLayerZeroFee')) {
+          throw new Error('Failed to calculate bridge fees. The bridge may be temporarily unavailable or congested');
+        } else {
+          throw new Error(`Bridge transaction failed: ${error.message.split('[')[0]}. This could be due to network congestion, bridge liquidity issues, or temporary outage.`);
+        }
+      } else {
+        throw new Error(`Bridge transaction failed: ${error.message}. Try again with a different gas setting or amount.`);
+      }
     }
     
     // Return transaction result
@@ -444,22 +534,39 @@ export async function getBridgeRoutes({
 }) {
   try {
     // Check if the token is supported on both chains
+    if (!isTokenSupportedOnChain(tokenSymbol, sourceChain)) {
+      const supportedChains = getSupportedChainsForToken(tokenSymbol);
+      throw new Error(`${tokenSymbol} is not supported on ${sourceChain}. It's available on: ${supportedChains.join(', ')}`);
+    }
+    
+    if (!isTokenSupportedOnChain(tokenSymbol, destChain)) {
+      const supportedChains = getSupportedChainsForToken(tokenSymbol);
+      throw new Error(`${tokenSymbol} is not supported on ${destChain}. It's available on: ${supportedChains.join(', ')}`);
+    }
+    
+    // Check if pool IDs exist for the token on both chains
     try {
       getPoolId(sourceChain, tokenSymbol);
       getPoolId(destChain, tokenSymbol);
     } catch (error) {
-      console.error('Token not supported on both chains:', error);
-      return [];
+      console.error('Token not supported by Stargate on both chains:', error);
+      throw new Error(`${tokenSymbol} cannot be bridged from ${sourceChain} to ${destChain} using Stargate. ${error.message}`);
     }
     
     // Calculate fees
-    const fees = await calculateStargateFees({
-      sourceChain,
-      destChain,
-      signer,
-      amount,
-      tokenSymbol
-    });
+    let fees;
+    try {
+      fees = await calculateStargateFees({
+        sourceChain,
+        destChain,
+        signer,
+        amount,
+        tokenSymbol
+      });
+    } catch (error) {
+      console.error('Error calculating fees:', error);
+      throw new Error(`Failed to calculate bridge fees: ${error.message}`);
+    }
     
     // Check if gas abstraction is supported
     const gaslessSupported = isGaslessSupported(sourceChain, tokenSymbol);
@@ -489,7 +596,7 @@ export async function getBridgeRoutes({
     return [route];
   } catch (error) {
     console.error('Error getting bridge routes:', error);
-    return [];
+    throw new Error(`Failed to get bridge routes: ${error.message}`);
   }
 }
 

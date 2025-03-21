@@ -33,6 +33,7 @@ export const supportedTokens = {
     decimals: 6,
     addresses: {
       'ethereum': '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+      'base': '0xc1105450E89b1Aa831e8dF141c9B838F0079B8dF', // Add Base USDT address
       'arbitrum': '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9',
       'optimism': '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58',
       'polygon': '0xc2132D05D31c914a87C6611C10748AEb04B58e8F',
@@ -58,6 +59,42 @@ export const supportedTokens = {
 };
 
 /**
+ * Check if a token is supported on a chain
+ * @param {string} tokenSymbol - Token symbol
+ * @param {string} chainName - Chain name
+ * @returns {boolean} Whether the token is supported
+ */
+export function isTokenSupportedOnChain(tokenSymbol, chainName) {
+  const normalizedSymbol = normalizeTokenSymbol(tokenSymbol);
+  const normalizedChain = chainName.toLowerCase();
+  
+  // Check if token exists
+  if (!supportedTokens[normalizedSymbol]) {
+    return false;
+  }
+  
+  // Check if token has an address on this chain
+  return Boolean(supportedTokens[normalizedSymbol].addresses[normalizedChain]);
+}
+
+/**
+ * Get supported chains for a token
+ * @param {string} tokenSymbol - Token symbol
+ * @returns {string[]} List of chains where token is supported
+ */
+export function getSupportedChainsForToken(tokenSymbol) {
+  const normalizedSymbol = normalizeTokenSymbol(tokenSymbol);
+  
+  // Check if token exists
+  if (!supportedTokens[normalizedSymbol]) {
+    return [];
+  }
+  
+  // Get chains where token has an address
+  return Object.keys(supportedTokens[normalizedSymbol].addresses);
+}
+
+/**
  * Get token contract for a specific token on a chain
  * @param {string} tokenSymbol - Token symbol
  * @param {string} chainName - Chain name
@@ -65,49 +102,57 @@ export const supportedTokens = {
  * @returns {Promise<ethers.Contract>} Token contract
  */
 export async function getTokenContract(tokenSymbol, chainName, signerOrProvider) {
-  // Normalize token symbol
-  const normalizedSymbol = normalizeTokenSymbol(tokenSymbol);
-  
-  // Check if token is supported
-  if (!supportedTokens[normalizedSymbol]) {
-    throw new Error(`Unsupported token: ${tokenSymbol}`);
-  }
-  
-  // Get token address for the chain
-  const tokenAddresses = supportedTokens[normalizedSymbol].addresses;
-  const address = tokenAddresses[chainName.toLowerCase()];
-  
-  if (!address) {
-    throw new Error(`Token ${tokenSymbol} not available on ${chainName}`);
-  }
-  
-  // Check if it's native ETH (special handling)
-  if (address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE') {
-    // For native ETH, return a minimal ERC20-like interface
-    return {
-      address,
-      decimals: async () => 18,
-      symbol: async () => 'ETH',
-      balanceOf: async (address) => {
-        if (signerOrProvider.provider) {
-          return signerOrProvider.provider.getBalance(address);
-        } else {
-          return signerOrProvider.getBalance(address);
+  try {
+    // Normalize token symbol
+    const normalizedSymbol = normalizeTokenSymbol(tokenSymbol);
+    const normalizedChain = chainName.toLowerCase();
+    
+    // Check if token is supported
+    if (!supportedTokens[normalizedSymbol]) {
+      throw new Error(`Unsupported token: ${tokenSymbol}. Currently supported tokens are: ${Object.keys(supportedTokens).join(', ')}`);
+    }
+    
+    // Get token address for the chain
+    const tokenAddresses = supportedTokens[normalizedSymbol].addresses;
+    const address = tokenAddresses[normalizedChain];
+    
+    if (!address) {
+      // Find chains where this token is available
+      const availableChains = Object.keys(tokenAddresses).join(', ');
+      throw new Error(`Token ${tokenSymbol} is not available on ${chainName}. It's available on: ${availableChains}`);
+    }
+    
+    // Check if it's native ETH (special handling)
+    if (address === '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE') {
+      // For native ETH, return a minimal ERC20-like interface
+      return {
+        address,
+        decimals: async () => 18,
+        symbol: async () => 'ETH',
+        balanceOf: async (address) => {
+          if (signerOrProvider.provider) {
+            return signerOrProvider.provider.getBalance(address);
+          } else {
+            return signerOrProvider.getBalance(address);
+          }
         }
-      }
-    };
+      };
+    }
+    
+    // Create contract with ERC20 ABI
+    const abi = [
+      'function decimals() view returns (uint8)',
+      'function symbol() view returns (string)',
+      'function balanceOf(address) view returns (uint256)',
+      'function allowance(address, address) view returns (uint256)',
+      'function approve(address, uint256) returns (bool)'
+    ];
+    
+    return new ethers.Contract(address, abi, signerOrProvider);
+  } catch (error) {
+    console.error(`Error getting token contract for ${tokenSymbol} on ${chainName}:`, error);
+    throw error;
   }
-  
-  // Create contract with ERC20 ABI
-  const abi = [
-    'function decimals() view returns (uint8)',
-    'function symbol() view returns (string)',
-    'function balanceOf(address) view returns (uint256)',
-    'function allowance(address, address) view returns (uint256)',
-    'function approve(address, uint256) returns (bool)'
-  ];
-  
-  return new ethers.Contract(address, abi, signerOrProvider);
 }
 
 /**
@@ -117,7 +162,7 @@ export async function getTokenContract(tokenSymbol, chainName, signerOrProvider)
  * @returns {BigNumber} Amount in wei units
  */
 export function parseTokenAmount(amount, decimals) {
-  return ethers.utils.parseUnits(amount.toString(), decimals);
+  return ethers.parseUnits(amount.toString(), decimals);
 }
 
 /**
@@ -127,7 +172,7 @@ export function parseTokenAmount(amount, decimals) {
  * @returns {string} Formatted amount
  */
 export function formatTokenAmount(amount, decimals) {
-  return ethers.utils.formatUnits(amount, decimals);
+  return ethers.formatUnits(amount, decimals);
 }
 
 /**

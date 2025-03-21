@@ -272,8 +272,181 @@ export async function executeBridgeWithGasAbstraction({
   }
 }
 
+/**
+ * Execute Stargate bridge with gas paid in bridged token
+ * @param {Object} params - Bridge parameters
+ * @param {string} params.sourceChain - Source chain
+ * @param {string} params.destChain - Destination chain
+ * @param {string} params.tokenSymbol - Token symbol
+ * @param {string} params.amount - Amount to bridge
+ * @param {ethers.Wallet} params.wallet - User wallet
+ * @returns {Promise<Object>} Transaction result
+ */
+export async function executeStargateBridgeWithTokenFees({
+  sourceChain,
+  destChain,
+  tokenSymbol,
+  amount,
+  wallet
+}) {
+  try {
+    console.log(`Executing Stargate bridge with ${tokenSymbol} fee payment`);
+    
+    // Initialize Biconomy
+    const biconomy = await initBiconomy(sourceChain, wallet.provider);
+    
+    // Get contract addresses and instances
+    const { getTokenContract } = await import('../tokens/tokenUtils.js');
+    const { getLZChainId, getPoolId, STARGATE_ADDRESSES } = await import('../bridge/providers.js');
+    
+    // Get necessary contracts
+    const routerAddress = STARGATE_ADDRESSES[sourceChain.toLowerCase()]?.router;
+    if (!routerAddress) {
+      throw new Error(`No Stargate router found for chain: ${sourceChain}`);
+    }
+    
+    // Create router contract
+    const routerAbi = [
+      'function swapWithFees(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams, bytes calldata _to, bytes calldata _payload, uint256 _feeAmount) payable',
+      'function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams) external view returns (uint256, uint256)'
+    ];
+    
+    const routerContract = new ethers.Contract(routerAddress, routerAbi, wallet);
+    
+    // Get token contract
+    const tokenContract = await getTokenContract(tokenSymbol, sourceChain, wallet);
+    const decimals = await tokenContract.decimals();
+    
+    // Parse amount
+    const amountWei = ethers.parseUnits(amount.toString(), decimals);
+    
+    // Calculate fee in token instead of ETH
+    // This is a simplified approach - in production, you'd need to
+    // convert ETH fee to token amount based on current exchange rates
+    const feePercentage = 0.5; // 0.5% fee
+    const feeAmount = amountWei.mul(Math.floor(feePercentage * 100)).div(10000);
+    
+    // Calculate total amount needed (amount + fee)
+    const totalAmount = amountWei.add(feeAmount);
+    
+    // Get pool IDs
+    const srcPoolId = getPoolId(sourceChain, tokenSymbol);
+    const dstPoolId = getPoolId(destChain, tokenSymbol);
+    
+    // Prepare parameters
+    const userAddress = await wallet.getAddress();
+    
+    // Check user balance
+    const userBalance = await tokenContract.balanceOf(userAddress);
+    if (userBalance.lt(totalAmount)) {
+      const formattedBalance = ethers.formatUnits(userBalance, decimals);
+      const formattedAmount = ethers.formatUnits(amountWei, decimals);
+      const formattedFee = ethers.formatUnits(feeAmount, decimals);
+      const formattedTotal = ethers.formatUnits(totalAmount, decimals);
+      const shortfall = ethers.formatUnits(totalAmount.sub(userBalance), decimals);
+      
+      throw new Error(
+        `Insufficient ${tokenSymbol} for transaction with token fees. ` +
+        `You have ${formattedBalance} ${tokenSymbol} but need ${formattedTotal} ${tokenSymbol} ` +
+        `(${formattedAmount} for bridge amount + ${formattedFee} for fee). ` +
+        `Shortfall: ${shortfall} ${tokenSymbol}.`
+      );
+    }
+    
+    const dstAddress = ethers.solidityPacked(['address'], [userAddress]);
+    const lzParams = ethers.solidityPacked(['uint16', 'uint256'], [1, 200000]);
+    
+    // Slippage tolerance (0.5%)
+    const minAmount = amountWei.sub(amountWei.mul(50).div(10000));
+    
+    // Check and approve token if needed
+    const allowance = await tokenContract.allowance(userAddress, routerAddress);
+    
+    if (allowance.lt(totalAmount)) {
+      console.log('Approving token transfer...');
+      try {
+        const approveTx = await tokenContract.approve(routerAddress, ethers.MaxUint256);
+        await approveTx.wait();
+        console.log('Token approval confirmed');
+      } catch (error) {
+        // Check for specific error conditions
+        if (error.message.includes('insufficient funds')) {
+          // Need some ETH for approval gas
+          const ethBalance = await wallet.provider.getBalance(userAddress);
+          const formattedEthBalance = ethers.formatEther(ethBalance);
+          
+          // Estimate approval gas (typically ~50000 gas)
+          const gasPrice = await wallet.provider.getGasPrice();
+          const approvalGas = gasPrice.mul(50000);
+          const formattedApprovalGas = ethers.formatEther(approvalGas);
+          
+          throw new Error(
+            `Insufficient ETH for token approval. Even with token fees payment, you still need ` +
+            `some ETH for the approval transaction. You have ${formattedEthBalance} ETH but need ` +
+            `approximately ${formattedApprovalGas} ETH for approval.`
+          );
+        }
+        throw new Error(`Failed to approve token transfer: ${error.message}`);
+      }
+    }
+    
+    // Execute the bridge with fees
+    console.log(`Executing bridge with token fees: ${ethers.formatUnits(feeAmount, decimals)} ${tokenSymbol}`);
+    
+    // Build meta-transaction
+    const metaTx = await buildMetaTransaction({
+      contract: routerContract,
+      method: 'swapWithFees',
+      params: [
+        getLZChainId(destChain),
+        srcPoolId,
+        dstPoolId,
+        userAddress,
+        amountWei,
+        minAmount,
+        lzParams,
+        dstAddress,
+        '0x', // payload
+        feeAmount
+      ],
+      from: userAddress
+    });
+    
+    // Sign meta-transaction
+    const signature = await signMetaTransaction({
+      metaTx,
+      chainName: sourceChain,
+      wallet
+    });
+    
+    // Send meta-transaction
+    const tx = await sendMetaTransaction({
+      metaTx,
+      signature,
+      chainName: sourceChain,
+      biconomy
+    });
+    
+    console.log(`Stargate bridge with token fees executed: ${tx.transactionHash}`);
+    
+    return {
+      transactionHash: tx.transactionHash,
+      sourceChain,
+      destChain,
+      amount,
+      tokenSymbol,
+      feeAmount: ethers.formatUnits(feeAmount, decimals),
+      provider: 'Stargate'
+    };
+  } catch (error) {
+    console.error('Error executing Stargate bridge with token fees:', error);
+    throw new Error(`Failed to execute bridge with token fees: ${error.message}`);
+  }
+}
+
 export default {
   isGaslessSupported,
   estimateGaslessTransactionCost,
-  executeBridgeWithGasAbstraction
+  executeBridgeWithGasAbstraction,
+  executeStargateBridgeWithTokenFees
 }; 

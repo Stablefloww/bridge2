@@ -3,6 +3,8 @@ import { useBridge } from '../hooks/useBridge';
 import { useNLP } from '../hooks/useNLP';
 import { ethers } from 'ethers';
 import { BRIDGE_STATUS } from '../lib/bridge/monitor';
+import BridgeError from './BridgeError';
+import { Web3Provider } from '@ethersproject/providers';
 
 const BridgeUI = ({ signer }) => {
   // State for form inputs
@@ -14,6 +16,11 @@ const BridgeUI = ({ signer }) => {
   const [slippageTolerance, setSlippageTolerance] = useState(0.5);
   const [activeTab, setActiveTab] = useState('form'); // 'form' or 'natural'
   const [darkMode, setDarkMode] = useState(false);
+  const [bridgeError, setBridgeError] = useState(null);
+  const [tokenBalance, setTokenBalance] = useState(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [ethBalance, setEthBalance] = useState(null);
+  const [isLoadingEthBalance, setIsLoadingEthBalance] = useState(false);
   
   // Get bridge hook functions
   const {
@@ -24,9 +31,13 @@ const BridgeUI = ({ signer }) => {
     selectRoute,
     isLoadingRoutes,
     isBridging,
-    bridgeError,
+    bridgeError: bridgeErrorFromHook,
     bridgeResult,
-    transactionStatus
+    transactionStatus,
+    useTokenFees,
+    toggleTokenFees,
+    useGasAbstraction,
+    toggleGasAbstraction
   } = useBridge(signer);
   
   // Get NLP hook functions
@@ -64,13 +75,26 @@ const BridgeUI = ({ signer }) => {
   
   // Handle executing the bridge transaction
   const handleBridge = async () => {
+    // Clear any previous errors
+    setBridgeError(null);
+    
+    // Validate balance first
+    if (tokenBalance && parseFloat(amount) > parseFloat(tokenBalance)) {
+      setBridgeError(`Insufficient ${tokenSymbol} balance. You have ${tokenBalance} but need ${amount}`);
+      return;
+    }
+    
     try {
+      // Log the start of bridge transaction with ethers
+      console.log('Initiating bridge transaction with ethers...');
+      
       await bridge({
         sourceChain,
         destChain,
         tokenSymbol,
         amount,
         slippageTolerance,
+        useTokenFeesParam: useTokenFees,
         selectedRoute
       });
     } catch (error) {
@@ -131,6 +155,13 @@ const BridgeUI = ({ signer }) => {
     }
   }, [nlpResult, needsClarification]);
   
+  // Sync bridge hook error with local state
+  useEffect(() => {
+    if (bridgeErrorFromHook) {
+      setBridgeError(bridgeErrorFromHook);
+    }
+  }, [bridgeErrorFromHook]);
+  
   // Render transaction status
   const renderTransactionStatus = () => {
     if (!transactionStatus) return null;
@@ -166,6 +197,71 @@ const BridgeUI = ({ signer }) => {
       </div>
     );
   };
+  
+  // Add a function to fetch token balance
+  const fetchTokenBalance = async () => {
+    if (!signer || !tokenSymbol || !sourceChain) return;
+    
+    setIsLoadingBalance(true);
+    try {
+      const { getTokenContract } = await import('../lib/tokens/tokenUtils');
+      const tokenContract = await getTokenContract(tokenSymbol, sourceChain, signer);
+      const address = await signer.getAddress();
+      const balance = await tokenContract.balanceOf(address);
+      const decimals = await tokenContract.decimals();
+      
+      // Format the balance with ethers
+      const formattedBalance = ethers.formatUnits(balance, decimals);
+      setTokenBalance(formattedBalance);
+    } catch (error) {
+      console.error("Error fetching token balance:", error);
+      setTokenBalance(null);
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  };
+  
+  // Add function to fetch ETH balance
+  const fetchEthBalance = async () => {
+    if (!signer) return;
+    
+    setIsLoadingEthBalance(true);
+    try {
+      const address = await signer.getAddress();
+      const balance = await signer.provider.getBalance(address);
+      
+      // Format the balance with ethers
+      const formattedBalance = ethers.formatEther(balance);
+      setEthBalance(formattedBalance);
+    } catch (error) {
+      console.error("Error fetching ETH balance:", error);
+      setEthBalance(null);
+    } finally {
+      setIsLoadingEthBalance(false);
+    }
+  };
+  
+  // Refetch both balances
+  const refreshBalances = () => {
+    fetchTokenBalance();
+    fetchEthBalance();
+  };
+  
+  // Update useEffect to fetch ETH balance
+  useEffect(() => {
+    fetchTokenBalance();
+    fetchEthBalance();
+    
+    // Initialize any wallet-related state after connecting
+    if (signer) {
+      try {
+        // Log that we have a connected signer
+        console.log('Signer connected:', signer);
+      } catch (error) {
+        console.error('Error initializing wallet:', error);
+      }
+    }
+  }, [tokenSymbol, sourceChain, signer]);
   
   return (
     <div className={`bridge-ui ${darkMode ? 'dark-mode' : 'light-mode'}`}>
@@ -316,6 +412,49 @@ const BridgeUI = ({ signer }) => {
                 />
               </div>
               
+              <div className="form-group balance-display">
+                <label>Your Balance:</label>
+                <div className="balance-value">
+                  {isLoadingBalance ? (
+                    <span className="loading">Loading...</span>
+                  ) : tokenBalance ? (
+                    <span>
+                      {parseFloat(tokenBalance).toFixed(6)} {tokenSymbol}
+                      <button 
+                        onClick={() => setAmount(tokenBalance)} 
+                        className="max-button"
+                        type="button"
+                      >
+                        MAX
+                      </button>
+                    </span>
+                  ) : (
+                    <span className="no-balance">No balance found</span>
+                  )}
+                </div>
+              </div>
+              
+              <div className="form-group balance-display">
+                <label>Your ETH Balance:</label>
+                <div className="balance-value">
+                  {isLoadingEthBalance ? (
+                    <span className="loading">Loading...</span>
+                  ) : ethBalance ? (
+                    <span>{parseFloat(ethBalance).toFixed(6)} ETH</span>
+                  ) : (
+                    <span className="no-balance">No balance found</span>
+                  )}
+                  <button 
+                    onClick={refreshBalances} 
+                    className="refresh-button"
+                    type="button"
+                    aria-label="Refresh balances"
+                  >
+                    ↻
+                  </button>
+                </div>
+              </div>
+              
               <div className="form-group">
                 <label htmlFor="slippage">Slippage Tolerance (%):</label>
                 <input
@@ -329,6 +468,36 @@ const BridgeUI = ({ signer }) => {
                   aria-label="Slippage Tolerance"
                 />
                 <div className="slippage-value">{slippageTolerance}%</div>
+              </div>
+            </div>
+            
+            <div className="toggle-options">
+              <div className="toggle-option">
+                <label htmlFor="useGasAbstraction">Use Gas Abstraction:</label>
+                <div className="toggle-switch">
+                  <input
+                    id="useGasAbstraction"
+                    type="checkbox"
+                    checked={useGasAbstraction}
+                    onChange={toggleGasAbstraction}
+                    aria-label="Use Gas Abstraction"
+                  />
+                  <span className="toggle-slider"></span>
+                </div>
+              </div>
+              
+              <div className="toggle-option">
+                <label htmlFor="useTokenFees">Pay Bridge Fees with Token:</label>
+                <div className="toggle-switch">
+                  <input
+                    id="useTokenFees"
+                    type="checkbox"
+                    checked={useTokenFees}
+                    onChange={toggleTokenFees}
+                    aria-label="Pay Bridge Fees with Token"
+                  />
+                  <span className="toggle-slider"></span>
+                </div>
               </div>
             </div>
             
@@ -404,19 +573,28 @@ const BridgeUI = ({ signer }) => {
           <button 
             className="bridge-button"
             onClick={handleBridge}
-            disabled={isBridging || routes.length === 0 || !selectedRoute}
+            disabled={
+              isBridging || 
+              routes.length === 0 || 
+              !selectedRoute || 
+              (tokenBalance && parseFloat(amount) > parseFloat(tokenBalance))
+            }
             aria-label="Execute Bridge"
           >
             {isBridging ? 'Bridging...' : 'Execute Bridge'}
+            {tokenBalance && parseFloat(amount) > parseFloat(tokenBalance) && 
+              <span className="insufficient-note"> (Insufficient balance)</span>
+            }
           </button>
         </div>
       )}
       
       {/* Bridge Errors */}
       {bridgeError && (
-        <div className="error-message">
-          <p>{bridgeError}</p>
-        </div>
+        <BridgeError 
+          error={bridgeError} 
+          onClose={() => setBridgeError(null)} 
+        />
       )}
       
       {/* Bridge Result */}
@@ -901,6 +1079,76 @@ const BridgeUI = ({ signer }) => {
           text-align: right;
         }
         
+        .toggle-options {
+          margin: 20px 0;
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 16px;
+        }
+        
+        .toggle-option {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        
+        .toggle-switch {
+          position: relative;
+          display: inline-block;
+          width: 48px;
+          height: 24px;
+        }
+        
+        .toggle-switch input {
+          opacity: 0;
+          width: 0;
+          height: 0;
+        }
+        
+        .toggle-slider {
+          position: absolute;
+          cursor: pointer;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-color: #ccc;
+          transition: .4s;
+          border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+          position: absolute;
+          content: "";
+          height: 18px;
+          width: 18px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          transition: .4s;
+          border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+          background-color: #10B981;
+        }
+        
+        input:focus + .toggle-slider {
+          box-shadow: 0 0 1px #10B981;
+        }
+        
+        input:checked + .toggle-slider:before {
+          transform: translateX(24px);
+        }
+        
+        .dark-mode .toggle-slider {
+          background-color: #4B5563;
+        }
+        
+        .dark-mode input:checked + .toggle-slider {
+          background-color: #10B981;
+        }
+        
         @media (max-width: 640px) {
           .form-grid {
             grid-template-columns: 1fr;
@@ -909,6 +1157,73 @@ const BridgeUI = ({ signer }) => {
           .routes-list {
             grid-template-columns: 1fr;
           }
+        }
+        
+        .balance-display {
+          grid-column: span 2;
+          margin-top: -8px;
+        }
+        
+        .balance-value {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: 14px;
+          background-color: #F3F4F6;
+        }
+        
+        .dark-mode .balance-value {
+          background-color: #1F2937;
+        }
+        
+        .loading {
+          color: #6B7280;
+        }
+        
+        .no-balance {
+          color: #6B7280;
+          font-style: italic;
+        }
+        
+        .max-button {
+          padding: 2px 6px;
+          font-size: 12px;
+          background-color: #10B981;
+          color: white;
+          border-radius: 4px;
+          margin-left: 8px;
+        }
+        
+        .refresh-button {
+          padding: 2px 6px;
+          font-size: 14px;
+          background-color: transparent;
+          color: #6B7280;
+          border-radius: 4px;
+          margin-left: 8px;
+          transition: all 0.2s;
+        }
+        
+        .refresh-button:hover {
+          background-color: #E5E7EB;
+          color: #374151;
+          transform: rotate(180deg);
+        }
+        
+        .dark-mode .refresh-button {
+          color: #9CA3AF;
+        }
+        
+        .dark-mode .refresh-button:hover {
+          background-color: #374151;
+          color: #F3F4F6;
+        }
+        
+        .insufficient-note {
+          font-size: 12px;
+          opacity: 0.7;
         }
       `}</style>
     </div>

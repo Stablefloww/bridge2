@@ -98,9 +98,9 @@ export const ERC20_ABI = [
 
 // ABI for Stargate Router
 export const StargateRouterABI = [
-  "function swap(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, (uint256, uint256) lzTxParams, bytes calldata _to, bytes calldata _payload) external payable",
+  "function swap(uint16 _dstChainId, uint256 _srcPoolId, uint256 _dstPoolId, address payable _refundAddress, uint256 _amountLD, uint256 _minAmountLD, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams, bytes calldata _to, bytes calldata _payload) external payable",
   "function swapETH(uint16 _dstChainId, address payable _refundAddress, bytes calldata _toAddress, uint256 _amountLD, uint256 _minAmountLD) external payable",
-  "function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, (uint256, uint256) lzTxParams) external view returns (uint256, uint256)"
+  "function quoteLayerZeroFee(uint16 _dstChainId, uint8 _functionType, bytes calldata _toAddress, bytes calldata _transferAndCallPayload, tuple(uint256 dstGasForCall, uint256 dstNativeAmount, bytes dstNativeAddr) _lzTxParams) external view returns (uint256, uint256)"
 ];
 
 // Normalize chain names to Stargate chain IDs
@@ -226,7 +226,7 @@ export class StargateClient {
           1, // _functionType for swapETH
           toAddressBytes,
           '0x', // empty payload
-          [0, 0] // lzTxParams, default value
+          {dstGasForCall: 0, dstNativeAmount: 0, dstNativeAddr: '0x'} // lzTxParams with correct structure
         );
         
         return estimatedFee;
@@ -246,7 +246,7 @@ export class StargateClient {
           1, // _functionType for swap
           toAddressBytes,
           '0x', // empty payload
-          [0, 0] // lzTxParams, default value
+          {dstGasForCall: 0, dstNativeAmount: 0, dstNativeAddr: '0x'} // lzTxParams with correct structure
         );
         
         return estimatedFee;
