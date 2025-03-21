@@ -2,7 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Initialize the Generative AI instance
 export const genAI = new GoogleGenerativeAI(
-  process.env.NEXT_PUBLIC_GEMINI_API_KEY || "AIzaSyAXeFYl6Rs9_iNrwEXEQ4h3a8hZZV4C-ko"
+  process.env.NEXT_PUBLIC_GEMINI_API_KEY || "your-gemini-api-key-here"
 );
 
 /**
