@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { useUIStore } from '@/store/ui';
-import { useBridgeStore } from '@/store/bridge';
+import * as React from 'react';
+import { useUIStore } from '../../store/ui';
+import { useBridgeStore } from '../../store/bridge';
 import { ChatMessage } from './ChatMessage';
 import { ChatInput } from './ChatInput';
 import { CommandFeedback } from './CommandFeedback';
@@ -10,21 +10,23 @@ import { ErrorMessage } from './ErrorMessage';
 
 export function ChatContainer() {
   const { chatHistory, addChatMessage } = useUIStore();
-  const { 
-    commandInterpretation, 
+  
+  const {
+    commandInterpretation,
     processingCommand,
     error
   } = useBridgeStore();
   
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Create ref with proper typing that doesn't trigger type errors
+  const messagesEndRef = React.useRef() as { current: HTMLDivElement | null };
   
   // Scroll to bottom when new messages are added
-  useEffect(() => {
+  React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory]);
   
   // Add system response when command is processed
-  useEffect(() => {
+  React.useEffect(() => {
     if (commandInterpretation && !processingCommand) {
       // Only add the message to chat history if it's an error or clarifying question
       // Otherwise, the CommandFeedback component will handle displaying the interpretation
@@ -35,11 +37,15 @@ export function ChatContainer() {
   }, [commandInterpretation, processingCommand, error, addChatMessage]);
   
   // Add error message when there's an error
-  useEffect(() => {
+  React.useEffect(() => {
     if (error && !processingCommand) {
       addChatMessage('system', `Error: ${error}`);
     }
   }, [error, processingCommand, addChatMessage]);
+  
+  const handleSendMessage = (message: string) => {
+    addChatMessage('user', message);
+  };
   
   return (
     <div className="flex flex-col h-full">
@@ -54,7 +60,7 @@ export function ChatContainer() {
         ) : (
           <>
             {chatHistory.map((msg) => (
-              <ChatMessage
+              <ChatMessage 
                 key={msg.id}
                 type={msg.type}
                 message={msg.message}
@@ -75,7 +81,7 @@ export function ChatContainer() {
       </div>
       
       <div className="border-t border-border dark:border-border-dark p-4">
-        <ChatInput />
+        <ChatInput onSendMessage={handleSendMessage} />
       </div>
     </div>
   );

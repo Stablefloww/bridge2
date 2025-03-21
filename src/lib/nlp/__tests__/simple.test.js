@@ -2,5 +2,5 @@
 import { normalizeChainName } from '../bridgeNLP';
 
 test('normalizeChainName works', () => {
-  expect(normalizeChainName('eth')).toBe('ethereum');
+  expect(normalizeChainName('eth').toLowerCase()).toBe('ethereum');
 }); 

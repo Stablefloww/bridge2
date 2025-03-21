@@ -4,7 +4,6 @@ import { useNLP } from '../hooks/useNLP';
 import { ethers } from 'ethers';
 import { BRIDGE_STATUS } from '../lib/bridge/monitor';
 import BridgeError from './BridgeError';
-import { Web3Provider } from '@ethersproject/providers';
 
 const BridgeUI = ({ signer }) => {
   // State for form inputs

@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react'
-import { parseCommand } from "@/lib/nlp/nlpProcessor"
-import { getRoutes } from "@/lib/bridge/providers"
-import { trackPerformance } from "@/lib/monitoring/sentry"
-import { BridgeLoadingSkeleton } from "@/components/common/LoadingSkeleton"
-import { initStargate, initSocket, simulateAndOptimize } from '@/lib/bridge/contracts'
+import React from 'react'
+import { parseCommand } from "../lib/nlp/nlpProcessor"
+import { getRoutes } from "../lib/bridge/providers"
+import { trackPerformance } from "../lib/monitoring/sentry"
+import { BridgeLoadingSkeleton } from "./common/LoadingSkeleton"
+import { initStargate, initSocket, simulateAndOptimize } from '../lib/bridge/contracts'
 import { useAccount } from "wagmi"
-import { initBiconomy } from "@/lib/biconomy/provider"
-import type { BridgeRoute } from "@/types/bridge"
+import { initBiconomy } from "../lib/gasless/biconomy"
+import type { BridgeRoute } from "../types/bridge"
+import { ethers } from "ethers"
 
 export const BridgeInterface = () => {
-  const [isLoading, setIsLoading] = useState(false)
-  const [command, setCommand] = useState('')
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [command, setCommand] = React.useState('')
   const { address: userAddress } = useAccount()
 
   const handleSubmit = async () => {
@@ -79,7 +80,10 @@ export const BridgeInterface = () => {
     
     // Execute via Biconomy if simulation succeeded
     if (simulationResult.success) {
-      const biconomy = await initBiconomy(Number(route.sourceChain))
+      // Create a mock provider for this example
+      const provider = new ethers.JsonRpcProvider();
+      
+      const biconomy = await initBiconomy(route.sourceChain, provider)
       const userOp = await biconomy.buildUserOp([txData])
       return biconomy.sendUserOp(userOp)
     } else {

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import nlpProcessor from '../lib/nlp/nlpProcessor';
+import nlpProcessor from '../lib/nlp/nlpProcessor.js';
 
 /**
  * Hook for processing natural language commands

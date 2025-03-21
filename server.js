@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { processNLPCommand } from './src/lib/nlp/bridgeNLP.js';
 import { ethers } from 'ethers';
 import dotenv from 'dotenv';
+import fs from 'fs';
 
 // Load environment variables
 dotenv.config({ path: '.env.local' });
@@ -106,7 +107,6 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static('public'));
 
 // Create public directory if it doesn't exist
-import fs from 'fs';
 if (!fs.existsSync('./public')) {
   fs.mkdirSync('./public');
 }

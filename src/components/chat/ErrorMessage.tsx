@@ -1,8 +1,34 @@
 'use client';
 
-import React from 'react';
-import { useBridgeStore } from '@/store/bridge';
-import { Button } from '@/components/ui/Button';
+import * as React from 'react';
+import { useBridgeStore } from '../../store/bridge';
+import { Button } from '../../components/ui/Button';
+
+// Define a basic interface for the Button if the imported one doesn't have the necessary props
+interface ButtonProps {
+  children: React.ReactNode;
+  onClick?: () => void;
+  className?: string;
+}
+
+// Simple custom button component that accepts the props we need
+const CustomButton: React.FC<ButtonProps & {
+  variant?: string;
+  size?: string;
+}> = ({ children, variant, size, onClick, className }) => {
+  // Compute class names based on variant and size
+  const variantClass = variant === 'outline' ? 'border border-gray-300 text-gray-700' : 'bg-primary text-white';
+  const sizeClass = size === 'sm' ? 'px-3 py-1 text-sm' : 'px-4 py-2';
+  
+  return (
+    <button 
+      className={`rounded ${variantClass} ${sizeClass} ${className || ''}`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+};
 
 /**
  * Component to display error messages with recovery suggestions
@@ -40,9 +66,9 @@ export const ErrorMessage: React.FC = () => {
       )}
 
       <div className="mt-4">
-        <Button variant="outline" size="sm" onClick={() => reset()}>
+        <CustomButton variant="outline" size="sm" onClick={() => reset()}>
           Try again
-        </Button>
+        </CustomButton>
       </div>
     </div>
   );

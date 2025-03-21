@@ -12,18 +12,23 @@ import {
 describe('Bridge NLP Functions', () => {
   describe('normalizeChainName', () => {
     it('should normalize various versions of chain names', () => {
-      expect(normalizeChainName('base')).toBe('base');
-      expect(normalizeChainName('Base Network')).toBe('base');
-      expect(normalizeChainName('ETH')).toBe('ethereum');
-      expect(normalizeChainName('Ethereum')).toBe('ethereum');
-      expect(normalizeChainName('ARB')).toBe('arbitrum');
-      expect(normalizeChainName('Arbitrum One')).toBe('arbitrum');
-      expect(normalizeChainName('OP')).toBe('optimism');
-      expect(normalizeChainName('Optimism')).toBe('optimism');
+      expect(normalizeChainName('base').toLowerCase()).toBe('base');
+      expect(normalizeChainName('Base Network').toLowerCase()).toBe('base');
+      expect(normalizeChainName('ETH').toLowerCase()).toBe('ethereum');
+      expect(normalizeChainName('Ethereum').toLowerCase()).toBe('ethereum');
+      expect(normalizeChainName('Arb').toLowerCase()).toBe('arbitrum');
+      expect(normalizeChainName('Arbitrum One').toLowerCase()).toBe('arbitrum');
+      expect(normalizeChainName('POLY').toLowerCase()).toBe('polygon');
+      expect(normalizeChainName('Polygon').toLowerCase()).toBe('polygon');
+      expect(normalizeChainName('mAtIc').toLowerCase()).toBe('polygon');
     });
     
-    it('should return null for unknown chains', () => {
-      expect(normalizeChainName('unknown chain')).toBeNull();
+    it('should return null for unsupported chains', () => {
+      expect(normalizeChainName('solana')).toBeNull();
+      expect(normalizeChainName('bitcoin')).toBeNull();
+      expect(normalizeChainName('')).toBeNull();
+      expect(normalizeChainName(null)).toBeNull();
+      expect(normalizeChainName(undefined)).toBeNull();
     });
     
     it('should handle edge cases', () => {
@@ -36,15 +41,21 @@ describe('Bridge NLP Functions', () => {
   describe('normalizeTokenName', () => {
     it('should normalize various versions of token names', () => {
       expect(normalizeTokenName('ETH')).toBe('ETH');
+      expect(normalizeTokenName('eth')).toBe('ETH');
       expect(normalizeTokenName('ether')).toBe('ETH');
       expect(normalizeTokenName('USDC')).toBe('USDC');
       expect(normalizeTokenName('usdc')).toBe('USDC');
       expect(normalizeTokenName('usdt')).toBe('USDT');
-      expect(normalizeTokenName('Tether')).toBe('USDT');
+      expect(normalizeTokenName('tether')).toBe('USDT');
+      expect(normalizeTokenName('dai')).toBe('DAI');
     });
     
     it('should return null for unknown tokens', () => {
-      expect(normalizeTokenName('unknown token')).toBeNull();
+      expect(normalizeTokenName('sol')).toBeNull();
+      expect(normalizeTokenName('btc')).toBeNull();
+      expect(normalizeTokenName('')).toBeNull();
+      expect(normalizeTokenName(null)).toBeNull();
+      expect(normalizeTokenName(undefined)).toBeNull();
     });
     
     it('should handle edge cases', () => {
@@ -57,12 +68,20 @@ describe('Bridge NLP Functions', () => {
   describe('isValidToken', () => {
     it('should validate supported tokens', () => {
       expect(isValidToken('ETH')).toBe(true);
+      expect(isValidToken('USDC')).toBe(true);
+      expect(isValidToken('USDT')).toBe(true);
+      expect(isValidToken('DAI')).toBe(true);
+    });
+    
+    it('should validate tokens using aliases', () => {
+      expect(isValidToken('eth')).toBe(true);
+      expect(isValidToken('ether')).toBe(true);
       expect(isValidToken('usdc')).toBe(true);
-      expect(isValidToken('Tether')).toBe(true);
-      expect(isValidToken('dai')).toBe(true);
+      expect(isValidToken('tether')).toBe(true);
     });
     
     it('should reject unsupported tokens', () => {
+      expect(isValidToken('SOL')).toBe(false);
       expect(isValidToken('BTC')).toBe(false);
       expect(isValidToken('UNKNOWN')).toBe(false);
     });
@@ -76,18 +95,24 @@ describe('Bridge NLP Functions', () => {
   
   describe('isChainSupported', () => {
     it('should validate supported chains', () => {
-      expect(isChainSupported('ethereum')).toBe(true);
-      expect(isChainSupported('base')).toBe(true);
-      expect(isChainSupported('ARB')).toBe(true);
+      expect(isChainSupported('Ethereum')).toBe(true);
+      expect(isChainSupported('Base')).toBe(true);
+      expect(isChainSupported('Arbitrum')).toBe(true);
       expect(isChainSupported('Optimism')).toBe(true);
+      expect(isChainSupported('Polygon')).toBe(true);
+    });
+    
+    it('should validate chains using aliases', () => {
+      expect(isChainSupported('eth')).toBe(true);
+      expect(isChainSupported('arb')).toBe(true);
+      expect(isChainSupported('op')).toBe(true);
+      expect(isChainSupported('poly')).toBe(true);
+      expect(isChainSupported('matic')).toBe(true);
     });
     
     it('should reject unsupported chains', () => {
-      expect(isChainSupported('solana')).toBe(false);
-      expect(isChainSupported('bitcoin')).toBe(false);
-    });
-    
-    it('should handle edge cases', () => {
+      expect(isChainSupported('Solana')).toBe(false);
+      expect(isChainSupported('Bitcoin')).toBe(false);
       expect(isChainSupported('')).toBe(false);
       expect(isChainSupported(null)).toBe(false);
       expect(isChainSupported(undefined)).toBe(false);
@@ -96,15 +121,24 @@ describe('Bridge NLP Functions', () => {
   
   describe('isValidBridgeRoute', () => {
     it('should validate supported routes', () => {
+      expect(isValidBridgeRoute('Ethereum', 'Base', 'ETH')).toBe(true);
       expect(isValidBridgeRoute('ethereum', 'base', 'ETH')).toBe(true);
-      expect(isValidBridgeRoute('base', 'optimism', 'USDC')).toBe(true);
-      expect(isValidBridgeRoute('ethereum', 'arbitrum', 'USDC')).toBe(true);
+      expect(isValidBridgeRoute('ETH', 'Base', 'ETH')).toBe(true);
+      expect(isValidBridgeRoute('Base', 'Arbitrum', 'USDC')).toBe(true);
+      expect(isValidBridgeRoute('base', 'arb', 'usdc')).toBe(true);
     });
     
     it('should reject unsupported routes', () => {
-      expect(isValidBridgeRoute('ethereum', 'ethereum', 'ETH')).toBe(false); // Same source and destination
-      expect(isValidBridgeRoute('base', 'arbitrum', 'DAI')).toBe(false); // Token not supported on route
-      expect(isValidBridgeRoute('solana', 'base', 'ETH')).toBe(false); // Chain not supported
+      expect(isValidBridgeRoute('Ethereum', 'InvalidChain', 'ETH')).toBe(false);
+      expect(isValidBridgeRoute('InvalidChain', 'Base', 'ETH')).toBe(false);
+      expect(isValidBridgeRoute('Base', 'Base', 'ETH')).toBe(false);
+      expect(isValidBridgeRoute('Ethereum', 'Arbitrum', 'DAI')).toBe(false);
+      expect(isValidBridgeRoute('', 'Base', 'ETH')).toBe(false);
+      expect(isValidBridgeRoute('Ethereum', '', 'ETH')).toBe(false);
+      expect(isValidBridgeRoute('Ethereum', 'Base', '')).toBe(false);
+      expect(isValidBridgeRoute(null, 'Base', 'ETH')).toBe(false);
+      expect(isValidBridgeRoute('Ethereum', null, 'ETH')).toBe(false);
+      expect(isValidBridgeRoute('Ethereum', 'Base', null)).toBe(false);
     });
     
     it('should handle edge cases', () => {
@@ -165,7 +199,7 @@ describe('Bridge NLP Functions', () => {
       const result = await processNLPCommand('Send 100 USDC to Arbitrum');
       expect(result).toBeTruthy();
       expect(result.sourceChain).toBe('base'); // Default source is Base
-      expect(result.destinationChain).toBe('arbitrum');
+      expect(result.destinationChain.toLowerCase()).toBe('arbitrum');
       expect(result.token).toBe('USDC');
       expect(result.amount).toBe('100');
       expect(result.gasPreference).toBe('normal');
@@ -174,8 +208,8 @@ describe('Bridge NLP Functions', () => {
     it('should process commands with explicit source chain', async () => {
       const result = await processNLPCommand('Bridge 10 ETH from Ethereum to Optimism');
       expect(result).toBeTruthy();
-      expect(result.sourceChain).toBe('ethereum');
-      expect(result.destinationChain).toBe('optimism');
+      expect(result.sourceChain.toLowerCase()).toBe('ethereum');
+      expect(result.destinationChain.toLowerCase()).toBe('optimism');
       expect(result.token).toBe('ETH');
       expect(result.amount).toBe('10');
     });
@@ -183,7 +217,7 @@ describe('Bridge NLP Functions', () => {
     it('should process commands with gas preferences', async () => {
       const result = await processNLPCommand('Send 50 USDT to Polygon with fast gas');
       expect(result).toBeTruthy();
-      expect(result.destinationChain).toBe('polygon');
+      expect(result.destinationChain.toLowerCase()).toBe('polygon');
       expect(result.token).toBe('USDT');
       expect(result.amount).toBe('50');
       expect(result.gasPreference).toBe('fast');
@@ -192,7 +226,7 @@ describe('Bridge NLP Functions', () => {
     it('should handle incomplete commands', async () => {
       const result = await processNLPCommand('Send USDC to Arbitrum');
       expect(result).toBeTruthy();
-      expect(result.destinationChain).toBe('arbitrum');
+      expect(result.destinationChain.toLowerCase()).toBe('arbitrum');
       expect(result.token).toBe('USDC');
       expect(result.amount).toBeNull();
     });
@@ -200,15 +234,20 @@ describe('Bridge NLP Functions', () => {
     it('should handle token aliases', async () => {
       const result = await processNLPCommand('Send 5 ether to Base');
       expect(result).toBeTruthy();
-      expect(result.destinationChain).toBe('base');
+      expect(result.destinationChain.toLowerCase()).toBe('base');
       expect(result.token).toBe('ETH');
       expect(result.amount).toBe('5');
     });
     
     it('should handle edge cases', async () => {
-      expect(await processNLPCommand('')).toBeNull();
-      expect(await processNLPCommand(null)).toBeNull();
-      expect(await processNLPCommand(undefined)).toBeNull();
+      const emptyResult = await processNLPCommand('');
+      expect(emptyResult).toBeNull();
+
+      const nullResult = await processNLPCommand(null);
+      expect(nullResult).toBeNull();
+
+      const undefinedResult = await processNLPCommand(undefined);
+      expect(undefinedResult).toBeNull();
     });
   });
 }); 

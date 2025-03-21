@@ -1,5 +1,5 @@
-import { getChatCompletion } from '@/lib/ai/openai';
-import { generateContent } from '@/lib/ai/gemini';
+import { getChatCompletion } from '../ai/openai';
+import { generateContent } from '../ai/gemini';
 import { ethers } from 'ethers';
 import { getStargateChainId } from '../bridges/stargate';
 
@@ -204,7 +204,7 @@ export function normalizeChainName(chain: string): string {
 /**
  * Normalizes a token name
  */
-export function normalizeTokenName(token: string): string {
+export function normalizeTokenName(token: string): string | null {
   const lowerToken = token.toLowerCase().trim();
   return tokenNameMap[lowerToken] || null;
 }
@@ -251,7 +251,7 @@ export async function generateClarificationQuestion(
 }
 
 // Extract a number from a string
-export function extractAmount(text: string): string {
+export function extractAmount(text: string): string | null {
   // Match number patterns including decimals
   const matches = text.match(/\b(\d+(\.\d+)?)\b/g);
   return matches ? matches[0] : null;
