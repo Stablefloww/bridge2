@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #FFFFFF;
+  --background-dark: #121212;
+  --surface: #F8F9FA;
+  --surface-dark: #1E1E1E;
+  --primary: #3B48DF;
+  --primary-dark: #5865F2;
+  --secondary: #10B981;
+  --secondary-dark: #10B981;
+  --warning: #F59E0B;
+  --warning-dark: #F59E0B;
+  --error: #EF4444;
+  --error-dark: #EF4444;
+  --text-primary: #171717;
+  --text-primary-dark: #F3F4F6;
+  --text-secondary: #6B7280;
+  --text-secondary-dark: #9CA3AF;
+  --border: #E5E7EB;
+  --border-dark: #374151;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: var(--background-dark);
+    --surface: var(--surface-dark);
+    --primary: var(--primary-dark);
+    --secondary: var(--secondary-dark);
+    --warning: var(--warning-dark);
+    --error: var(--error-dark);
+    --text-primary: var(--text-primary-dark);
+    --text-secondary: var(--text-secondary-dark);
+    --border: var(--border-dark);
+  }
+}
+
+html,
+body {
+  color: var(--text-primary);
+  background-color: var(--background);
+}
+
+.dark {
+  --background: var(--background-dark);
+  --surface: var(--surface-dark);
+  --primary: var(--primary-dark);
+  --secondary: var(--secondary-dark);
+  --warning: var(--warning-dark);
+  --error: var(--error-dark);
+  --text-primary: var(--text-primary-dark);
+  --text-secondary: var(--text-secondary-dark);
+  --border: var(--border-dark);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-text-primary;
+  }
+} 

@@ -1,0 +1,16 @@
+{
+    "mcpServers": {
+      "base-mcp": {
+        "command": "npx",
+        "args": ["base-mcp@latest"],
+        "env": {
+          "COINBASE_API_KEY_NAME": "builder",
+          "COINBASE_API_PRIVATE_KEY": "GhWH4bSLv0WTMY0Jq3x6r3YmpvFf9BBZYeYFUfit7t4vdkEBIpg10f8FjOY+63pPzJ4qV39LKVx3zAeWWFU8Bg==",
+          "SEED_PHRASE": "increase stove still book elevator place knife intact degree globe notable feature",
+          "COINBASE_PROJECT_ID": "3563a2d7-bde9-46d7-bf48-c28eaf7e1772"
+        },
+        "disabled": false,
+        "autoApprove": []
+      }
+    }
+  }
