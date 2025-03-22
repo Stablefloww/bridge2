@@ -7,7 +7,7 @@ const COINBASE_API_PRIVATE_KEY = process.env.NEXT_PUBLIC_COINBASE_API_PRIVATE_KE
 const COINBASE_PROJECT_ID = process.env.NEXT_PUBLIC_COINBASE_PROJECT_ID || "3563a2d7-bde9-46d7-bf48-c28eaf7e1772"
 const COINBASE_KEY_ID = process.env.NEXT_PUBLIC_COINBASE_KEY_ID || "e51be061-9079-4aae-a45c-0e1171b1b9e8"
 
-const BASE_URL = "https://api.coinbase.com/api/v3"
+const BASE_URL =  "https://api.coinbase.com/api/v3"
 
 /**
  * Creates signature for Coinbase API requests
